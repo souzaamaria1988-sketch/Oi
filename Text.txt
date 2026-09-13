@@ -1,6 +1,6 @@
 --==================================================================--
--- GodsAndPlayersESP - Booga Booga (v6 - com AUTO MINE)
--- Sintaxe conservadora: sem +=, sem continue, sem caracteres especiais.
+-- GodsAndPlayersESP - Booga Booga (v7)
+-- Corrigido: '...' fora de funcao vararg (erro de sintaxe da v6)
 -- Execute pelo executor. Atalho da UI: Right Shift
 --==================================================================--
 
@@ -53,7 +53,6 @@ local Settings = {
     PlayerTeamColor = true,
     PlayerMaxDist = 5000,
 
-    -- Auto minerar
     AutoMine = false,
     AutoMineMethod = "Input",
     AutoMineMinInstances = 15,
@@ -61,6 +60,7 @@ local Settings = {
     AutoMineHoldTime = 6,
     AutoMineRetryDelay = 8,
     AutoMineRemoteDelay = 0.4,
+    AutoMinePacketIndex = 1,
     AutoMineEquipTool = true,
     AutoMineStopMove = true,
     AutoMineGods = true,
@@ -903,7 +903,7 @@ local function ClearPlayersESP()
 end
 
 --============================--
--- AUTO MINERAR - Camada de entrada simulada
+-- AUTO MINERAR - Entrada simulada
 --============================--
 local VIM = nil
 do
@@ -1140,7 +1140,7 @@ local function FindMineTarget(rootPos, now)
     end
 
     if bestGod then
-        if Settings.AutoMinePreferGods or bestGodDist <= bestResDist or not bestRes then
+        if Settings.AutoMinePreferGods or not bestRes or bestGodDist <= bestResDist then
             return bestGod
         end
     end
@@ -1155,8 +1155,7 @@ local RemoteSpyData = {
     original = nil,
     hooked = false,
     armed = false,
-    lastArgs = nil,
-    hasArgs = false,
+    captured = {},
 }
 
 local function FindByteNetRemote()
@@ -1190,23 +1189,18 @@ local function InstallRemoteSpy()
         return false
     end
 
-    local oldNamecall = nil
+    local oldNamecall
     local hookFunc = function(self, ...)
         local method = getnamecallmethod()
         if method == "FireServer" and self == remote then
-            pcall(function()
-                RemoteSpyData.lastArgs = PackArgs(...)
-                RemoteSpyData.hasArgs = true
-                if RemoteSpyData.armed then
-                    RemoteSpyData.armed = false
-                    local args = RemoteSpyData.lastArgs
-                    print("[AutoMine] Pacote capturado (" .. tostring(args.n) .. " argumentos):")
-                    for i = 1, args.n do
-                        local v = args[i]
-                        print("[AutoMine]   arg" .. i .. " = (" .. type(v) .. ") " .. tostring(v))
-                    end
-                end
-            end)
+            local args = PackArgs(...)
+            if RemoteSpyData.armed then
+                pcall(function()
+                    local idx = #RemoteSpyData.captured + 1
+                    RemoteSpyData.captured[idx] = args
+                    print("[AutoMine] Pacote " .. idx .. " capturado (" .. tostring(args.n) .. " argumentos)")
+                end)
+            end
         end
         return oldNamecall(self, ...)
     end
@@ -1246,16 +1240,18 @@ local function RemoteMineStep()
     if not remote then
         return false
     end
-    if not RemoteSpyData.hasArgs or not RemoteSpyData.lastArgs then
+    local list = RemoteSpyData.captured
+    local count = #list
+    if count == 0 then
         return false
     end
-    local args = RemoteSpyData.lastArgs
+    local idx = Settings.AutoMinePacketIndex
+    if idx < 1 or idx > count then
+        idx = count
+    end
+    local args = list[idx]
     local ok = pcall(function()
-        if table.unpack then
-            remote:FireServer(table.unpack(args, 1, args.n))
-        else
-            remote:FireServer(unpack(args, 1, args.n))
-        end
+        remote:FireServer(table.unpack(args, 1, args.n))
     end)
     return ok
 end
@@ -1367,7 +1363,7 @@ local function StartAutoMine()
             local waitTime = 1
             local ok, err = pcall(function()
                 if Settings.AutoMineMethod == "Remote" then
-                    if RemoteSpyData.hasArgs then
+                    if #RemoteSpyData.captured > 0 then
                         RemoteMineStep()
                         waitTime = Settings.AutoMineRemoteDelay
                     else
@@ -1529,7 +1525,7 @@ genv.GodsPlayersESP_Destroy = FullCleanup
 --============================--
 local Window = Rayfield:CreateWindow({
     Name = "Gods & Players ESP",
-    Subtitle = "Booga Booga v6",
+    Subtitle = "Booga Booga v7",
     Icon = 13641909418,
     SidebarLayout = true,
     DisableBuildWarnings = true,
@@ -1665,15 +1661,31 @@ MineTab:CreateDropdown({
 })
 
 MineTab:CreateButton({
-    Name = "Capturar pacote do Remote (mine 1x depois)",
+    Name = "Capturar pacotes do Remote (mine 1x depois)",
     Callback = function()
         local okSpy = InstallRemoteSpy()
         if not okSpy then
             print("[AutoMine] Captura falhou: executor sem hookmetamethod ou ByteNetReliable nao encontrado.")
             return
         end
+        RemoteSpyData.captured = {}
         RemoteSpyData.armed = true
-        print("[AutoMine] Armado. Agora va no jogo e MINE algo 1x manualmente. O pacote sera capturado no console.")
+        print("[AutoMine] Armado por 4 segundos: va no jogo e MINE algo agora. Cada pacote aparece no console.")
+        task.delay(4, function()
+            RemoteSpyData.armed = false
+            print("[AutoMine] Captura encerrada. Total de pacotes: " .. tostring(#RemoteSpyData.captured))
+        end)
+    end,
+})
+
+MineTab:CreateSlider({
+    Name = "Indice do pacote a repetir (modo Remote)",
+    Range = { 1, 30 },
+    Increment = 1,
+    CurrentValue = Settings.AutoMinePacketIndex,
+    Flag = "AutoMinePacketIndex",
+    Callback = function(v)
+        Settings.AutoMinePacketIndex = v
     end,
 })
 
@@ -1711,7 +1723,7 @@ MineTab:CreateToggle({ Name = "Usar toque de celular (alem do mouse)", CurrentVa
 
 AddText(MineTab, {
     Title = "Como funciona",
-    Content = "MODO INPUT (recomendado): mira a camera no recurso mais perto, solta as teclas de movimento e simula o clique/toque SEGURADO na tela. A animacao de minerar toca normal. O script NAO anda: fique perto dos recursos e feche este menu (Right Shift) antes de ativar, senao o clique pode acertar a interface. So minera tipos de recurso com o minimo de instancias definido (ex: 15). Deuses sao minados a parte se ativado. MODO REMOTE (experimental): o Booga Booga usa protocolo binario proprio (ByteNet), entao disparar o remote direto pode nao funcionar; use o botao de captura, mine 1x manualmente e o script repete o pacote.",
+    Content = "MODO INPUT (recomendado): mira a camera no recurso mais perto, solta as teclas de movimento e simula o clique/toque SEGURADO na tela. A animacao de minerar toca normal. Fique perto dos recursos e FECHE este menu (Right Shift) antes de ativar, senao o clique pode acertar a interface. MODO REMOTE (experimental): o Booga Booga usa protocolo binario proprio (ByteNet), entao pode nao funcionar. Use o botao de captura, mine 1x manualmente, veja os pacotes no console e escolha o indice certo no slider.",
 })
 
 -- ===== TAB: MISC =====
@@ -1743,7 +1755,7 @@ MiscTab:CreateButton({
 
 AddText(MiscTab, {
     Title = "Info",
-    Content = "Atalho da UI: Right Shift. Reexecutar o script e seguro: a instancia anterior e destruida automaticamente. O Roblox renderiza no maximo 31 Highlights ao mesmo tempo.",
+    Content = "Atalho da UI: Right Shift. Reexecutar o script e seguro: a instancia anterior e destruida automaticamente.",
 })
 
 --============================--
@@ -1772,6 +1784,5 @@ if Settings.AutoMine then
     StartAutoMine()
 end
 
-print("[GodsAndPlayersESP v6] Carregado com sucesso.")
+print("[GodsAndPlayersESP v7] Carregado com sucesso.")
 print("[ESP] Atalho da interface: Right Shift")
-print("[AutoMine] Modo Input: mira + clique/toque segurado (com animacao). Modo Remote: use a captura de pacote.")
