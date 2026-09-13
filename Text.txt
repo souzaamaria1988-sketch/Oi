@@ -1,13 +1,6 @@
 --==================================================================--
--- GodsAndPlayersESP — Booga Booga (v4 — MÁXIMA OTIMIZAÇÃO)
---
--- • SEM beacons (eram a causa da multiplicação/travamento)
--- • Limpa TODOS os "GodBeacon" deixados pela versão antiga ao iniciar
--- • Scan do mapa em segundo plano, em pedaços (não trava frames)
--- • Detecção de deuses por EVENTO (DescendantAdded), custo ~zero
--- • Raízes em cache, textos só atualizam quando mudam
--- • Anti-duplicação via getgenv (reexecutar é 100% seguro)
---
+-- GodsAndPlayersESP - Booga Booga (v5)
+-- Sintaxe 100% conservadora: sem +=, sem caracteres especiais.
 -- Execute pelo executor. Atalho da UI: Right Shift
 --==================================================================--
 
@@ -28,16 +21,15 @@ do
         Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
     end)
     if not ok or not Rayfield then
-        warn("[ESP] Não foi possível carregar a Rayfield: " .. tostring(err))
+        warn("[ESP] Falha ao carregar a Rayfield: " .. tostring(err))
         return
     end
 end
 
 --============================--
--- Configurações
+-- Configuracoes
 --============================--
 local Settings = {
-    -- Deuses
     GodsESP = false,
     GodHighlight = true,
     GodName = true,
@@ -47,7 +39,6 @@ local Settings = {
     GodMaxDist = 10000,
     GodDebug = false,
 
-    -- Jogadores
     PlayersESP = false,
     PlayerBox2D = false,
     PlayerBox3D = false,
@@ -69,19 +60,18 @@ local GODS_LIST = {
     "Strange God", "Odd God", "Dark God", "Soulless God", "Infinity God",
 }
 
--- Nomes "limpos" pré-computados UMA vez (evita gsub em cada checagem)
 local CLEAN_GODS = {}
 for i = 1, #GODS_LIST do
-    CLEAN_GODS[i] = (string.gsub(string.lower(GODS_LIST[i]), "[%s_%%-]", ""))
+    CLEAN_GODS[i] = string.gsub(string.lower(GODS_LIST[i]), "[%s_-]", "")
 end
 
 local FALSE_POSITIVES = { "godray" }
 
-local HEAVY_INTERVAL = 0.15  -- raycast/distância/textos (6-7x por segundo)
-local GOD_INTERVAL   = 0.15  -- atualização dos deuses (billboard segue sozinho)
+local HEAVY_INTERVAL = 0.15
+local GOD_INTERVAL = 0.15
 
 --============================--
--- Drawing (apenas para Skeleton)
+-- Biblioteca Drawing (so para o Skeleton)
 --============================--
 local DrawingSupported = false
 do
@@ -108,11 +98,14 @@ local SKELETON_R6 = {
 }
 
 --============================--
--- ANTI-DUPLICAÇÃO
--- Mata a instância anterior do script (conexões, pastas, desenhos)
+-- Anti-duplicacao: mata a instancia anterior do script
 --============================--
-if getgenv().GodsPlayersESP_Destroy then
-    pcall(getgenv().GodsPlayersESP_Destroy)
+local genv = {}
+if type(getgenv) == "function" then
+    genv = getgenv()
+end
+if genv.GodsPlayersESP_Destroy then
+    pcall(genv.GodsPlayersESP_Destroy)
 end
 
 local Active = true
@@ -123,15 +116,13 @@ local function track(conn)
 end
 
 --============================--
--- VARREDURA: destruir beacons "GodBeacon" da versão antiga
--- (conserta o jogo que está travado AGORA)
+-- Destroi todos os GodBeacon deixados pela versao antiga
 --============================--
 task.spawn(function()
     local descendants = Workspace:GetDescendants()
     for i = 1, #descendants do
-        local inst = descendants[i]
-        if inst.Name == "GodBeacon" then
-            pcall(function() inst:Destroy() end)
+        if descendants[i].Name == "GodBeacon" then
+            pcall(function() descendants[i]:Destroy() end)
         end
     end
 end)
@@ -139,9 +130,12 @@ end)
 --============================--
 -- Containers
 --============================--
-for _, name in ipairs({"GodsESP_Folder", "PlayersESP_Folder", "ESP_2D_ScreenGui"}) do
-    local old = CoreGui:FindFirstChild(name)
-    if old then old:Destroy() end
+local oldNames = {"GodsESP_Folder", "PlayersESP_Folder", "ESP_2D_ScreenGui"}
+for i = 1, #oldNames do
+    local old = CoreGui:FindFirstChild(oldNames[i])
+    if old then
+        old:Destroy()
+    end
 end
 
 local GodsFolder = Instance.new("Folder")
@@ -161,10 +155,10 @@ ScreenGui.Parent = CoreGui
 
 local GodESPData = {}
 local PlayerESPData = {}
-local CachedPlayers = {} -- cache de players (sem alocar array por frame)
+local CachedPlayers = {}
 
 --============================--
--- Raycast (params REUTILIZÁVEIS — sem criar instância por chamada)
+-- Utilitarios
 --============================--
 local RayParams = RaycastParams.new()
 RayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -172,77 +166,96 @@ RayParams.IgnoreWater = true
 
 local function IsVisible(part, origin, ignoreModel)
     local dir = part.Position - origin
-    if dir.Magnitude < 0.1 then return true end
-
-    local myChar = LocalPlayer.Character
-    if ignoreModel and myChar then
-        RayParams.FilterDescendantsInstances = {myChar, ignoreModel}
-    elseif ignoreModel then
-        RayParams.FilterDescendantsInstances = {ignoreModel}
-    elseif myChar then
-        RayParams.FilterDescendantsInstances = {myChar}
-    else
-        RayParams.FilterDescendantsInstances = {}
+    if dir.Magnitude < 0.1 then
+        return true
     end
 
+    local filter = {}
+    local myChar = LocalPlayer.Character
+    if myChar then
+        filter[#filter + 1] = myChar
+    end
+    if ignoreModel then
+        filter[#filter + 1] = ignoreModel
+    end
+    RayParams.FilterDescendantsInstances = filter
+
     local result = Workspace:Raycast(origin, dir, RayParams)
-    if not result then return true end
+    if not result then
+        return true
+    end
     local hit = result.Instance
     return hit == part or hit:IsDescendantOf(part)
 end
 
---============================--
--- Detecção de deuses
---============================--
 local function IsGodName(rawName)
     local lower = string.lower(rawName)
-    -- early-out: 99,9% dos objetos nem têm "god" no nome (1 único find)
-    if not string.find(lower, "god", 1, true) then return false end
-
-    local clean = string.gsub(lower, "[%s_%%-]", "")
+    if not string.find(lower, "god", 1, true) then
+        return false
+    end
+    local clean = string.gsub(lower, "[%s_-]", "")
     for i = 1, #CLEAN_GODS do
-        if string.find(clean, CLEAN_GODS[i], 1, true) then return true end
+        if string.find(clean, CLEAN_GODS[i], 1, true) then
+            return true
+        end
     end
     for i = 1, #FALSE_POSITIVES do
-        if string.find(clean, FALSE_POSITIVES[i], 1, true) then return false end
+        if string.find(clean, FALSE_POSITIVES[i], 1, true) then
+            return false
+        end
     end
     return true
 end
 
 local function ResolveGodRoot(god)
-    if god:IsA("BasePart") then return god end
-    local pp = god.PrimaryPart
-    if pp and pp.Parent then return pp end
-    for _, c in ipairs(god:GetChildren()) do
-        if c:IsA("BasePart") then return c end
+    if god:IsA("BasePart") then
+        return god
     end
-    for _, d in ipairs(god:GetDescendants()) do
-        if d:IsA("BasePart") then return d end
+    local pp = god.PrimaryPart
+    if pp and pp.Parent then
+        return pp
+    end
+    local children = god:GetChildren()
+    for i = 1, #children do
+        if children[i]:IsA("BasePart") then
+            return children[i]
+        end
+    end
+    local descendants = god:GetDescendants()
+    for i = 1, #descendants do
+        if descendants[i]:IsA("BasePart") then
+            return descendants[i]
+        end
     end
     return nil
 end
 
 local function ComputeGodOffset(god)
-    -- chamado UMA vez por deus (na criação), nunca por frame
-    local ok, size = pcall(function()
-        if god:IsA("Model") then
-            return select(2, god:GetBoundingBox())
-        elseif god:IsA("BasePart") then
-            return god.Size
+    local size = Vector3.new(0, 0, 0)
+    if god:IsA("BasePart") then
+        size = god.Size
+    elseif god:IsA("Model") then
+        local ok, s = pcall(function()
+            local bbCF, bbSize = god:GetBoundingBox()
+            return bbSize
+        end)
+        if ok and s then
+            size = s
         end
-        return Vector3.zero
-    end)
-    if ok and size and size.Y > 0 then
+    end
+    if size.Y > 0 then
         return Vector3.new(0, size.Y * 0.5 + 3, 0)
     end
     return Vector3.new(0, 6, 0)
 end
 
 --============================--
--- ESP DE DEUSES
+-- ESP de Deuses
 --============================--
 local function CreateGodVisuals(god)
-    if GodESPData[god] then return end
+    if GodESPData[god] then
+        return
+    end
 
     local folder = Instance.new("Folder")
     folder.Name = "GodVisuals_" .. god.Name
@@ -299,12 +312,13 @@ end
 
 local function UpdateGodVisuals(god, data, cam, now)
     if not god.Parent then
-        if data.folder then pcall(function() data.folder:Destroy() end) end
+        if data.folder then
+            pcall(function() data.folder:Destroy() end)
+        end
         GodESPData[god] = nil
         return
     end
 
-    -- raiz em CACHE: só re-resolve (GetDescendants) 1x/segundo se invalidar
     local root = data.root
     if not root or not root.Parent then
         root = nil
@@ -342,19 +356,23 @@ local function UpdateGodVisuals(god, data, cam, now)
 
     if data.lastRoot ~= root then
         data.lastRoot = root
-        data.billboard.Adornee = root -- billboard segue o deus sozinho depois disso
+        data.billboard.Adornee = root
     end
 
     local showText = Settings.GodName or Settings.GodDistance
     data.billboard.Enabled = showText
     if showText then
         local text = ""
-        if Settings.GodName then text = god.Name end
+        if Settings.GodName then
+            text = god.Name
+        end
         if Settings.GodDistance then
-            if text ~= "" then text = text .. "  •  " end
+            if text ~= "" then
+                text = text .. " | "
+            end
             text = text .. string.format("%.0fm", dist)
         end
-        if data.lastText ~= text then -- só re-renderiza o texto quando MUDA
+        if data.lastText ~= text then
             data.lastText = text
             data.label.Text = text
         end
@@ -367,30 +385,36 @@ local function UpdateGodVisuals(god, data, cam, now)
 end
 
 local function TryRegisterGod(inst)
-    if GodESPData[inst] then return end
-    if not (inst:IsA("Model") or inst:IsA("BasePart")) then return end
-    if not IsGodName(inst.Name) then return end
-    if Players:GetPlayerFromCharacter(inst) then return end
+    if GodESPData[inst] then
+        return
+    end
+    if not (inst:IsA("Model") or inst:IsA("BasePart")) then
+        return
+    end
+    if not IsGodName(inst.Name) then
+        return
+    end
+    if Players:GetPlayerFromCharacter(inst) then
+        return
+    end
     CreateGodVisuals(inst)
 end
 
--- Scan EM SEGUNDO PLANO, em pedaços: nunca trava um frame
 local function StartGodScan()
     task.spawn(function()
         local ok, err = pcall(function()
             local stack = {Workspace}
             local processed = 0
-            while #stack > 0 and Active do
-                if not Settings.GodsESP then break end
+            while #stack > 0 and Active and Settings.GodsESP do
                 local inst = table.remove(stack)
                 TryRegisterGod(inst)
                 local children = inst:GetChildren()
                 for i = 1, #children do
                     stack[#stack + 1] = children[i]
                 end
-                processed += 1
+                processed = processed + 1
                 if processed % 4096 == 0 then
-                    task.wait() -- entrega o frame pro jogo
+                    task.wait()
                 end
             end
         end)
@@ -400,31 +424,30 @@ local function StartGodScan()
     end)
 end
 
--- Detecção por EVENTO: novos deuses aparecem instantaneamente, custo ~zero
-track(Workspace.DescendantAdded:Connect(function(inst)
-    if Active and Settings.GodsESP then
-        TryRegisterGod(inst)
-    end
-end))
-
 local function ClearGodsESP()
     for god, data in pairs(GodESPData) do
-        if data.folder then pcall(function() data.folder:Destroy() end) end
+        if data.folder then
+            pcall(function() data.folder:Destroy() end)
+        end
+        GodESPData[god] = nil
     end
-    table.clear(GodESPData)
 end
 
 --============================--
--- ESP DE JOGADORES
+-- ESP de Jogadores
 --============================--
 local function RemovePlayerVisuals(player)
     local data = PlayerESPData[player]
-    if not data then return end
+    if not data then
+        return
+    end
     PlayerESPData[player] = nil
     pcall(function() data.folder:Destroy() end)
     pcall(function() data.box2d:Destroy() end)
     pcall(function() data.healthbar:Destroy() end)
-    if data.box3d then pcall(function() data.box3d:Destroy() end) end
+    if data.box3d then
+        pcall(function() data.box3d:Destroy() end)
+    end
     if data.skeletonLines then
         for i = 1, #data.skeletonLines do
             pcall(function() data.skeletonLines[i]:Remove() end)
@@ -433,14 +456,17 @@ local function RemovePlayerVisuals(player)
 end
 
 local function CreatePlayerVisuals(player)
-    if player == LocalPlayer then return nil end
+    if player == LocalPlayer then
+        return nil
+    end
     local data = PlayerESPData[player]
-    if data then return data end
+    if data then
+        return data
+    end
 
     local folder = Instance.new("Folder")
     folder.Name = "PlayerVisuals_" .. player.Name
 
-    -- Chams (segue o personagem sozinho via Adornee)
     local chams = Instance.new("Highlight")
     chams.FillColor = Settings.PlayerColor
     chams.FillTransparency = 0.7
@@ -450,7 +476,6 @@ local function CreatePlayerVisuals(player)
     chams.Enabled = false
     chams.Parent = folder
 
-    -- Billboard
     local billboard = Instance.new("BillboardGui")
     billboard.Size = UDim2.fromOffset(220, 58)
     billboard.StudsOffset = Vector3.new(0, 3, 0)
@@ -491,7 +516,6 @@ local function CreatePlayerVisuals(player)
     healthLabel.Text = ""
     healthLabel.Parent = billboard
 
-    -- Box 3D (SelectionBox no personagem, segue sozinho)
     local box3d = Instance.new("SelectionBox")
     box3d.SurfaceTransparency = 1
     box3d.LineThickness = 0.05
@@ -499,7 +523,6 @@ local function CreatePlayerVisuals(player)
     box3d.Visible = false
     box3d.Parent = Workspace.CurrentCamera
 
-    -- Box 2D
     local box2d = Instance.new("Frame")
     box2d.BackgroundColor3 = Color3.new(0, 0, 0)
     box2d.BackgroundTransparency = 0.7
@@ -512,7 +535,6 @@ local function CreatePlayerVisuals(player)
     box2dStroke.Thickness = 1.2
     box2dStroke.Parent = box2d
 
-    -- Healthbar
     local hbBg = Instance.new("Frame")
     hbBg.Size = UDim2.fromOffset(4, 60)
     hbBg.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -557,7 +579,9 @@ local function CreatePlayerVisuals(player)
 end
 
 local function HideSkeleton(data)
-    if not data.skelOn then return end -- early-out: não faz loop à toa
+    if not data.skelOn then
+        return
+    end
     data.skelOn = false
     local lines = data.skeletonLines
     for i = 1, #lines do
@@ -573,7 +597,11 @@ local function UpdateSkeleton(data, char, cam, color)
 
     local list = SKELETON_R6
     if not char:FindFirstChild("Torso") then
-        list = char:FindFirstChild("UpperTorso") and SKELETON_R15 or nil
+        if char:FindFirstChild("UpperTorso") then
+            list = SKELETON_R15
+        else
+            list = nil
+        end
     end
     if not list then
         HideSkeleton(data)
@@ -604,7 +632,9 @@ local function UpdateSkeleton(data, char, cam, color)
                     line.From = Vector2.new(pa.X, pa.Y)
                     line.To = Vector2.new(pb.X, pb.Y)
                     line.Color = color
-                    if not line.Visible then line.Visible = true end
+                    if not line.Visible then
+                        line.Visible = true
+                    end
                 elseif line.Visible then
                     line.Visible = false
                 end
@@ -620,12 +650,26 @@ local function UpdateSkeleton(data, char, cam, color)
     end
 end
 
--- Atualização "pesada" (raycast, distância, textos): só a cada 150ms
 local function UpdatePlayerHeavy(player, data, cam)
     local char = player.Character
-    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-    local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChildWhichIsA("BasePart"))
-    local head = char and (char:FindFirstChild("Head") or root)
+    local humanoid = nil
+    local root = nil
+    local head = nil
+
+    if char then
+        humanoid = char:FindFirstChildOfClass("Humanoid")
+        root = char:FindFirstChild("HumanoidRootPart")
+        if not root then
+            root = char.PrimaryPart
+        end
+        if not root then
+            root = char:FindFirstChildWhichIsA("BasePart")
+        end
+        head = char:FindFirstChild("Head")
+        if not head then
+            head = root
+        end
+    end
 
     data.char = char
     data.root = root
@@ -652,11 +696,13 @@ local function UpdatePlayerHeavy(player, data, cam)
     data.visible = visible
 
     if not visible then
-        if data.shown then -- esconde UMA vez, não todo frame
+        if data.shown then
             data.shown = false
             data.chams.Enabled = false
             data.billboard.Enabled = false
-            if data.box3d then data.box3d.Visible = false end
+            if data.box3d then
+                data.box3d.Visible = false
+            end
             data.box2d.Visible = false
             data.healthbar.Visible = false
             data.boxShown = false
@@ -671,28 +717,31 @@ local function UpdatePlayerHeavy(player, data, cam)
     if Settings.PlayerTeamColor and player.Team then
         color = player.TeamColor.Color
     end
-    if data.color ~= color then -- cores só quando mudam
+    if data.color ~= color then
         data.color = color
         data.box2dStroke.Color = color
         data.chams.FillColor = color
         data.chams.OutlineColor = color
         data.nameLabel.TextColor3 = color
         data.distLabel.TextColor3 = color
-        if data.box3d then data.box3d.Color3 = color end
+        if data.box3d then
+            data.box3d.Color3 = color
+        end
     end
 
-    -- adornees só quando o personagem muda (não todo frame)
     if data.lastAdorn ~= char then
         data.lastAdorn = char
         data.chams.Adornee = char
-        if data.box3d then data.box3d.Adornee = char end
+        if data.box3d then
+            data.box3d.Adornee = char
+        end
         data.billboard.Adornee = head
     end
 
     data.chams.Enabled = Settings.PlayerChams
 
     if data.box3d then
-        if data.box3d.Parent ~= cam then -- câmera recriada (respawn)?
+        if data.box3d.Parent ~= cam then
             local ok = pcall(function() data.box3d.Parent = cam end)
             if not ok then
                 local nb = Instance.new("SelectionBox")
@@ -700,6 +749,7 @@ local function UpdatePlayerHeavy(player, data, cam)
                 nb.LineThickness = 0.05
                 nb.Color3 = color
                 nb.Adornee = char
+                nb.Visible = false
                 nb.Parent = cam
                 data.box3d = nb
             end
@@ -739,9 +789,21 @@ local function UpdatePlayerHeavy(player, data, cam)
             end
         end
     end
+
+    -- esconde elementos cujo toggle foi desligado (sem esperar o proximo frame)
+    if data.boxShown and not Settings.PlayerBox2D then
+        data.boxShown = false
+        data.box2d.Visible = false
+    end
+    if data.hbShown and not Settings.PlayerHealthBar then
+        data.hbShown = false
+        data.healthbar.Visible = false
+    end
+    if data.skelOn and (not Settings.PlayerSkeleton or not DrawingSupported) then
+        HideSkeleton(data)
+    end
 end
 
--- Atualização POR FRAME: só Box 2D + Healthbar + Skeleton (o resto segue sozinho)
 local function UpdatePlayerFrame(data, cam)
     local char = data.char
 
@@ -752,20 +814,31 @@ local function UpdatePlayerFrame(data, cam)
     end
 
     if not (Settings.PlayerBox2D or Settings.PlayerHealthBar) then
-        if data.boxShown then data.boxShown = false; data.box2d.Visible = false end
-        if data.hbShown then data.hbShown = false; data.healthbar.Visible = false end
+        if data.boxShown then
+            data.boxShown = false
+            data.box2d.Visible = false
+        end
+        if data.hbShown then
+            data.hbShown = false
+            data.healthbar.Visible = false
+        end
         return
     end
 
-    local head, root = data.head, data.root
-    if not head or not root then return end
+    local head = data.head
+    local root = data.root
+    if not head or not root then
+        return
+    end
 
     local headPos, headOn = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1, 0))
     local footPos, footOn = cam:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
 
     if headOn and footOn then
         local height = math.abs(footPos.Y - headPos.Y)
-        if height < 6 then height = 6 end
+        if height < 6 then
+            height = 6
+        end
         local width = math.max(height * 0.6, 10)
         local x = headPos.X - width * 0.5
         local y = math.min(headPos.Y, footPos.Y)
@@ -799,8 +872,14 @@ local function UpdatePlayerFrame(data, cam)
             data.healthbar.Visible = false
         end
     else
-        if data.boxShown then data.boxShown = false; data.box2d.Visible = false end
-        if data.hbShown then data.hbShown = false; data.healthbar.Visible = false end
+        if data.boxShown then
+            data.boxShown = false
+            data.box2d.Visible = false
+        end
+        if data.hbShown then
+            data.hbShown = false
+            data.healthbar.Visible = false
+        end
     end
 end
 
@@ -808,11 +887,10 @@ local function ClearPlayersESP()
     for player in pairs(PlayerESPData) do
         RemovePlayerVisuals(player)
     end
-    table.clear(PlayerESPData)
 end
 
 --============================--
--- Cache de players (eventos, sem alocação por frame)
+-- Cache de players (eventos, sem alocacao por frame)
 --============================--
 track(Players.PlayerAdded:Connect(function(p)
     if p ~= LocalPlayer then
@@ -830,26 +908,39 @@ track(Players.PlayerRemoving:Connect(function(p)
     end
 end))
 
-for _, p in ipairs(Players:GetPlayers()) do
-    if p ~= LocalPlayer then
-        CachedPlayers[#CachedPlayers + 1] = p
+local existing = Players:GetPlayers()
+for i = 1, #existing do
+    if existing[i] ~= LocalPlayer then
+        CachedPlayers[#CachedPlayers + 1] = existing[i]
     end
 end
 
 --============================--
--- LOOP PRINCIPAL (uma única conexão, trabalho mínimo por frame)
+-- Deteccao de deuses por evento (custo quase zero)
+--============================--
+track(Workspace.DescendantAdded:Connect(function(inst)
+    if Active and Settings.GodsESP then
+        TryRegisterGod(inst)
+    end
+end))
+
+--============================--
+-- Loop principal
 --============================--
 local LastGodTick = 0
 
 track(RunService.RenderStepped:Connect(function()
-    if not Active then return end
+    if not Active then
+        return
+    end
     local cam = Workspace.CurrentCamera
-    if not cam then return end
+    if not cam then
+        return
+    end
     local now = os.clock()
 
     if Settings.PlayersESP then
-        local perFrame2D = Settings.PlayerBox2D or Settings.PlayerHealthBar
-            or (Settings.PlayerSkeleton and DrawingSupported)
+        local perFrame2D = Settings.PlayerBox2D or Settings.PlayerHealthBar or (Settings.PlayerSkeleton and DrawingSupported)
 
         for i = 1, #CachedPlayers do
             local plr = CachedPlayers[i]
@@ -873,8 +964,6 @@ track(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Deuses: NADA por frame (billboard/highlight seguem sozinhos).
-    -- Só checagens leves a cada 150ms.
     if Settings.GodsESP and (now - LastGodTick) >= GOD_INTERVAL then
         LastGodTick = now
         for god, data in pairs(GodESPData) do
@@ -884,44 +973,47 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 --============================--
--- Cleanup completo (usado ao reexecutar o script)
+-- Cleanup completo (usado ao reexecutar ou pelo botao de destruir)
 --============================--
 local function FullCleanup()
     Active = false
     for i = 1, #Connections do
         pcall(function() Connections[i]:Disconnect() end)
     end
-    table.clear(Connections)
 
-    ClearPlayersESP()
-    for god, data in pairs(GodESPData) do
-        if data.folder then pcall(function() data.folder:Destroy() end) end
+    for player in pairs(PlayerESPData) do
+        RemovePlayerVisuals(player)
     end
-    table.clear(GodESPData)
+    for god, data in pairs(GodESPData) do
+        if data.folder then
+            pcall(function() data.folder:Destroy() end)
+        end
+        GodESPData[god] = nil
+    end
 
     pcall(function() GodsFolder:Destroy() end)
     pcall(function() PlayersFolder:Destroy() end)
     pcall(function() ScreenGui:Destroy() end)
     pcall(function() Rayfield:Destroy() end)
 
-    -- remove beacons de QUALQUER versão
-    pcall(function()
-        for _, inst in ipairs(Workspace:GetDescendants()) do
-            if inst.Name == "GodBeacon" then
-                inst:Destroy()
+    task.spawn(function()
+        local descendants = Workspace:GetDescendants()
+        for i = 1, #descendants do
+            if descendants[i].Name == "GodBeacon" then
+                pcall(function() descendants[i]:Destroy() end)
             end
         end
     end)
 end
 
-getgenv().GodsPlayersESP_Destroy = FullCleanup
+genv.GodsPlayersESP_Destroy = FullCleanup
 
 --============================--
--- INTERFACE RAYFIELD
+-- Interface Rayfield
 --============================--
 local Window = Rayfield:CreateWindow({
     Name = "Gods & Players ESP",
-    Subtitle = "Booga Booga — v4 Otimizado",
+    Subtitle = "Booga Booga v5",
     Icon = 13641909418,
     SidebarLayout = true,
     DisableBuildWarnings = true,
@@ -933,9 +1025,9 @@ local Window = Rayfield:CreateWindow({
 })
 
 local function AddText(tab, info)
-    if typeof(tab.CreateText) == "function" then
+    if type(tab.CreateText) == "function" then
         tab:CreateText(info)
-    elseif typeof(tab.CreateParagraph) == "function" then
+    elseif type(tab.CreateParagraph) == "function" then
         tab:CreateParagraph(info)
     end
 end
@@ -961,12 +1053,12 @@ GodsTab:CreateToggle({
 GodsTab:CreateSection("Visual")
 GodsTab:CreateToggle({ Name = "Highlight (Brilho)", CurrentValue = Settings.GodHighlight, Flag = "GodHighlight", Callback = function(v) Settings.GodHighlight = v end })
 GodsTab:CreateToggle({ Name = "Mostrar Nome", CurrentValue = Settings.GodName, Flag = "GodName", Callback = function(v) Settings.GodName = v end })
-GodsTab:CreateToggle({ Name = "Mostrar Distância", CurrentValue = Settings.GodDistance, Flag = "GodDistance", Callback = function(v) Settings.GodDistance = v end })
+GodsTab:CreateToggle({ Name = "Mostrar Distancia", CurrentValue = Settings.GodDistance, Flag = "GodDistance", Callback = function(v) Settings.GodDistance = v end })
 GodsTab:CreateToggle({ Name = "Verificar Visibilidade", CurrentValue = Settings.GodVisCheck, Flag = "GodVisCheck", Callback = function(v) Settings.GodVisCheck = v end })
 
 GodsTab:CreateSection("Cores")
 GodsTab:CreateColorPicker({ Name = "Cor dos Deuses", Color = Settings.GodColor, Flag = "GodColor", Callback = function(v) Settings.GodColor = v end })
-GodsTab:CreateSlider({ Name = "Distância Máxima", Range = {100, 20000}, Increment = 100, CurrentValue = Settings.GodMaxDist, Flag = "GodMaxDist", Callback = function(v) Settings.GodMaxDist = v end })
+GodsTab:CreateSlider({ Name = "Distancia Maxima", Range = {100, 20000}, Increment = 100, CurrentValue = Settings.GodMaxDist, Flag = "GodMaxDist", Callback = function(v) Settings.GodMaxDist = v end })
 
 GodsTab:CreateSection("Debug")
 GodsTab:CreateToggle({ Name = "Modo Debug (console)", CurrentValue = Settings.GodDebug, Flag = "GodDebug", Callback = function(v) Settings.GodDebug = v end })
@@ -977,14 +1069,16 @@ GodsTab:CreateButton({
     end,
 })
 GodsTab:CreateButton({
-    Name = "Listar objetos com 'god' (ver console)",
+    Name = "Listar objetos com 'god' no nome (ver console)",
     Callback = function()
         task.spawn(function()
             local count = 0
-            for _, inst in ipairs(Workspace:GetDescendants()) do
+            local descendants = Workspace:GetDescendants()
+            for i = 1, #descendants do
+                local inst = descendants[i]
                 if string.find(string.lower(inst.Name), "god", 1, true) then
-                    count += 1
-                    print("→ " .. inst:GetFullName() .. " (" .. inst.ClassName .. ")")
+                    count = count + 1
+                    print("[GodESP] " .. inst:GetFullName() .. " (" .. inst.ClassName .. ")")
                 end
             end
             print("[GodESP] Total de objetos com 'god' no nome: " .. count)
@@ -994,7 +1088,7 @@ GodsTab:CreateButton({
 
 AddText(GodsTab, {
     Title = "Performance",
-    Content = "Deuses custam QUASE ZERO de FPS: o highlight/billboard seguem o modelo sozinhos e as checagens rodam só 6x por segundo. Novos deuses são detectados por evento, instantaneamente.",
+    Content = "O highlight e o billboard seguem o deus sozinhos; as checagens rodam 6 vezes por segundo. Novos deuses sao detectados por evento, instantaneamente.",
 })
 
 -- ===== TAB: PLAYERS =====
@@ -1007,7 +1101,9 @@ PlayersTab:CreateToggle({
     Flag = "PlayersESP",
     Callback = function(v)
         Settings.PlayersESP = v
-        if not v then ClearPlayersESP() end
+        if not v then
+            ClearPlayersESP()
+        end
     end,
 })
 
@@ -1015,26 +1111,27 @@ PlayersTab:CreateSection("Boxes")
 PlayersTab:CreateToggle({ Name = "Box 2D", CurrentValue = Settings.PlayerBox2D, Flag = "PlayerBox2D", Callback = function(v) Settings.PlayerBox2D = v end })
 PlayersTab:CreateToggle({ Name = "Box 3D", CurrentValue = Settings.PlayerBox3D, Flag = "PlayerBox3D", Callback = function(v) Settings.PlayerBox3D = v end })
 
-PlayersTab:CreateSection("Informações")
+PlayersTab:CreateSection("Informacoes")
 PlayersTab:CreateToggle({ Name = "Mostrar Nome", CurrentValue = Settings.PlayerName, Flag = "PlayerName", Callback = function(v) Settings.PlayerName = v end })
-PlayersTab:CreateToggle({ Name = "Mostrar Distância", CurrentValue = Settings.PlayerDistance, Flag = "PlayerDistance", Callback = function(v) Settings.PlayerDistance = v end })
+PlayersTab:CreateToggle({ Name = "Mostrar Distancia", CurrentValue = Settings.PlayerDistance, Flag = "PlayerDistance", Callback = function(v) Settings.PlayerDistance = v end })
 PlayersTab:CreateToggle({ Name = "Mostrar Vida", CurrentValue = Settings.PlayerHealth, Flag = "PlayerHealth", Callback = function(v) Settings.PlayerHealth = v end })
 PlayersTab:CreateToggle({ Name = "Healthbar 2D", CurrentValue = Settings.PlayerHealthBar, Flag = "PlayerHealthBar", Callback = function(v) Settings.PlayerHealthBar = v end })
-PlayersTab:CreateToggle({ Name = "Skeleton (custa mais FPS)", CurrentValue = Settings.PlayerSkeleton, Flag = "PlayerSkeleton", Callback = function(v) Settings.PlayerSkeleton = v end })
+PlayersTab:CreateToggle({ Name = "Skeleton (o mais pesado)", CurrentValue = Settings.PlayerSkeleton, Flag = "PlayerSkeleton", Callback = function(v) Settings.PlayerSkeleton = v end })
 
 PlayersTab:CreateSection("Visual")
 PlayersTab:CreateToggle({ Name = "Chams", CurrentValue = Settings.PlayerChams, Flag = "PlayerChams", Callback = function(v) Settings.PlayerChams = v end })
 PlayersTab:CreateToggle({ Name = "Verificar Visibilidade", CurrentValue = Settings.PlayerVisCheck, Flag = "PlayerVisCheck", Callback = function(v) Settings.PlayerVisCheck = v end })
 PlayersTab:CreateToggle({ Name = "Usar Cor do Time", CurrentValue = Settings.PlayerTeamColor, Flag = "PlayerTeamColor", Callback = function(v) Settings.PlayerTeamColor = v end })
-PlayersTab:CreateColorPicker({ Name = "Cor Padrão", Color = Settings.PlayerColor, Flag = "PlayerColor", Callback = function(v) Settings.PlayerColor = v end })
-PlayersTab:CreateSlider({ Name = "Distância Máxima", Range = {100, 10000}, Increment = 100, CurrentValue = Settings.PlayerMaxDist, Flag = "PlayerMaxDist", Callback = function(v) Settings.PlayerMaxDist = v end })
+PlayersTab:CreateColorPicker({ Name = "Cor Padrao", Color = Settings.PlayerColor, Flag = "PlayerColor", Callback = function(v) Settings.PlayerColor = v end })
+PlayersTab:CreateSlider({ Name = "Distancia Maxima", Range = {100, 10000}, Increment = 100, CurrentValue = Settings.PlayerMaxDist, Flag = "PlayerMaxDist", Callback = function(v) Settings.PlayerMaxDist = v end })
 
-AddText(PlayersTab, {
-    Title = "Performance",
-    Content = DrawingSupported
-        and "Chams/Nome/Vida/Box3D custam quase zero (seguem o personagem sozinhos, atualizados 6x/s). Só Box 2D, Healthbar e Skeleton rodam por frame — o Skeleton é o mais pesado."
-        or "Aviso: seu executor NÃO tem a biblioteca Drawing, então o Skeleton não funciona (o resto funciona normalmente).",
-})
+local skeletonNote
+if DrawingSupported then
+    skeletonNote = "Chams, nome, vida e Box 3D custam quase zero. So Box 2D, Healthbar e Skeleton rodam por frame, e o Skeleton e o mais pesado."
+else
+    skeletonNote = "Aviso: este executor NAO tem a biblioteca Drawing, entao o Skeleton nao funciona. O resto do ESP funciona normalmente."
+end
+AddText(PlayersTab, { Title = "Performance", Content = skeletonNote })
 
 -- ===== TAB: MISC =====
 local MiscTab = Window:CreateTab({ Name = "Misc", Icon = 4779510615 })
@@ -1044,14 +1141,15 @@ MiscTab:CreateButton({
     Callback = function()
         task.spawn(function()
             local n = 0
-            for _, inst in ipairs(Workspace:GetDescendants()) do
-                if inst.Name == "GodBeacon" then
-                    inst:Destroy()
-                    n += 1
+            local descendants = Workspace:GetDescendants()
+            for i = 1, #descendants do
+                if descendants[i].Name == "GodBeacon" then
+                    pcall(function() descendants[i]:Destroy() end)
+                    n = n + 1
                 end
             end
             print("[ESP] GodBeacons removidos: " .. n)
-        end
+        end)
     end,
 })
 
@@ -1064,31 +1162,29 @@ MiscTab:CreateButton({
 
 AddText(MiscTab, {
     Title = "Info",
-    Content = "Atalho da UI: Right Shift. Reexecutar o script é seguro: a instância anterior é destruída automaticamente. O Roblox renderiza no máximo 31 Highlights ao mesmo tempo (deuses + chams).",
+    Content = "Atalho da UI: Right Shift. Reexecutar o script e seguro: a instancia anterior e destruida automaticamente. O Roblox renderiza no maximo 31 Highlights ao mesmo tempo.",
 })
 
 --============================--
 -- Atalho da interface
 --============================--
 track(UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
+    if processed then
+        return
+    end
     if input.KeyCode == Enum.KeyCode.RightShift then
         pcall(function()
-            if typeof(Rayfield.Toggle) == "function" then
+            if type(Rayfield.Toggle) == "function" then
                 Rayfield:Toggle()
             end
         end)
     end
 end))
 
--- Scan inicial (caso a config salva já venha com o God ESP ligado)
+-- Scan inicial caso a config salva venha com o God ESP ligado
 if Settings.GodsESP then
     StartGodScan()
 end
 
-print("[GodsAndPlayersESP v4] Carregado e otimizado:")
-print("  • GodBeacon removido + varredura de beacons antigos ao iniciar")
-print("  • Scan do mapa em segundo plano (em pedaços, nunca trava)")
-print("  • Detecção por evento (DescendantAdded)")
-print("  • Deuses custam ~zero FPS; jogadores quase zero sem Box/Skeleton")
-print("  • Reexecutar é seguro (anti-duplicação via getgenv)")
+print("[GodsAndPlayersESP v5] Carregado com sucesso.")
+print("[ESP] Atalho da interface: Right Shift")
