@@ -1,2998 +1,1094 @@
--- Identical v5.0 - Material 3 Express Edition --
+  --==================================================================--
+-- GodsAndPlayersESP — Booga Booga (v4 — MÁXIMA OTIMIZAÇÃO)
+--
+-- • SEM beacons (eram a causa da multiplicação/travamento)
+-- • Limpa TODOS os "GodBeacon" deixados pela versão antiga ao iniciar
+-- • Scan do mapa em segundo plano, em pedaços (não trava frames)
+-- • Detecção de deuses por EVENTO (DescendantAdded), custo ~zero
+-- • Raízes em cache, textos só atualizam quando mudam
+-- • Anti-duplicação via getgenv (reexecutar é 100% seguro)
+--
+-- Execute pelo executor. Atalho da UI: Right Shift
+--==================================================================--
 
-local cloneref = cloneref or function(o) return o end
-
-if getgenv and getgenv().IdenticalBoogaUnload then
-    pcall(getgenv().IdenticalBoogaUnload)
-end
-
--- Services --
-local Players = cloneref(game:GetService("Players"))
-local RunService = cloneref(game:GetService("RunService"))
-local Workspace = cloneref(game:GetService("Workspace"))
-local UserInputService = cloneref(game:GetService("UserInputService"))
-local TweenService = cloneref(game:GetService("TweenService"))
-local CoreGui = cloneref(game:GetService("CoreGui"))
-local HttpService = cloneref(game:GetService("HttpService"))
-local Lighting = cloneref(game:GetService("Lighting"))
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
-local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
 
--- Remote Events --
-local RS = game:GetService("ReplicatedStorage")
-local Events = RS:FindFirstChild("Events")
-local RemotePickup = Events and Events:FindFirstChild("Pickup")
-local RemoteUseBagItem = Events and Events:FindFirstChild("UseBagItem")
-local RemoteInteractStructure = Events and
-    (Events:FindFirstChild("InteractStructure") or Events:FindFirstChild("lnteractStructure"))
-local RemoteSwingTool = Events and Events:FindFirstChild("SwingTool")
-local RemoteCraftItem = Events and Events:FindFirstChild("CraftItem")
-local RemoteDropBagItem = Events and Events:FindFirstChild("DropBagItem")
-local RemoteEquipTool = Events and Events:FindFirstChild("EquipTool")
-local RemoteConsume = Events and Events:FindFirstChild("Consume")
-local RemoteFishing = Events and Events:FindFirstChild("Fishing")
-
-local Packets
-pcall(function()
-    if RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Packets") then
-        Packets = require(RS.Modules.Packets)
+--============================--
+-- Rayfield Gen2
+--============================--
+local Rayfield
+do
+    local ok, err = pcall(function()
+        Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+    end)
+    if not ok or not Rayfield then
+        warn("[ESP] Não foi possível carregar a Rayfield: " .. tostring(err))
+        return
     end
-end)
-
-local Clock
-pcall(function()
-    if RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Clock") then
-        Clock = require(RS.Modules.Clock)
-    end
-end)
-
--- Config --
-local Config = {
-    CombatReach = true, CombatAura = false, CombatRange = 25, CombatInterval = 0.25,
-    CombatIgnoreTribe = true, TargetPriority = "Closest", LineOfSight = false,
-    HumanizedPacing = true, MicroBreaks = false, AutoDodge = false, DodgeThreshold = 15,
-    BowAimbot = false, AimbotTarget = "Players", AimbotPart = "Head", AimbotRange = 250,
-    AimbotSmoothness = 0, AimbotPrediction = true, AimbotWallCheck = true,
-    AutoHeal = false, HealThreshold = 60, HealFood = "Cooked Meat",
-    ThreatProtection = false, ThreatRadius = 35, RetreatHealth = 35,
-    AutoPickup = false, PickupRange = 30, PickupFilter = "All", PickupInterval = 0.15,
-    AutoDropTrash = false, RareItemAlert = true,
-    ResourceAura = false, ResourceRange = 20, ResourceInterval = 0.25, ResourceFilter = "All",
-    CritterAura = false, CritterRange = 20, CritterInterval = 0.25,
-    AutoFarm = false, FarmType = "Resource", FarmFilter = "Wood", FarmRange = 60,
-    FarmMovement = "Walk", FarmSpeed = 36, AutoEquipTool = true, FilterUnreachable = true,
-    StuckTimeout = 6, DeathRecovery = true, SmartPathfinding = true,
-    AutoChest = false, ChestRange = 25, AutoPlant = false, PlantRange = 30,
-    AutoCraft = false, CraftRecipe = "Campfire", CraftInterval = 1.5, AutoProcess = false,
-    AutoClaimDaily = false,
-    BoatCruise = false, BoatSpeed = 45,
-    ESPCritters = false, ESPResources = false, ESPPlayers = false, ESPItems = false,
-    ESPChests = false, ESPTraders = false, ESPMeteors = true, ESPGodRock = true,
-    ESPDistance = 350, ESPTracers = false, ESPBoxes = false, ESPHealthBars = false,
-    ESPNames = true, ESPDistanceText = true,
-    SpeedEnabled = false, SpeedValue = 20, JumpEnabled = false, JumpValue = 83,
-    InfiniteJump = false, Noclip = false, AntiAFK = true, Fullbright = false,
-    NoFog = false, DisableParticles = false,
-    UIKeybind = Enum.KeyCode.LeftControl, StopKeybind = Enum.KeyCode.End,
-    Notifications = true, ChatMessages = false, ChatInterval = 30,
-    ChatText = "Identical v5.0", AutoFishing = false, FishingDelay = 2,
-    KillCounter = true, ShowStats = false,
-    Waypoints = {}, UIVisible = true, UIMinimized = false
-}
-
-local SessionStats = {
-    Kills = 0, ResourcesGathered = 0, ItemsPickedUp = 0, ChestsOpened = 0,
-    DistanceWalked = 0, SessionTime = 0, StartTime = tick()
-}
-
-local activeConnections = {}
-local espStorage = {}
-local espFolder = CoreGui:FindFirstChild("Identical_ESP_Folder") or
-    LocalPlayer.PlayerGui:FindFirstChild("Identical_ESP_Folder")
-if not espFolder then
-    espFolder = Instance.new("Folder")
-    espFolder.Name = "Identical_ESP_Folder"
-    espFolder.Parent = (runContext == "CoreGui") and CoreGui or LocalPlayer.PlayerGui
-else
-    espFolder:ClearAllChildren()
 end
 
--- Cache System --
-local CachedRefs = {
-    PlayersFolder = Workspace:FindFirstChild("Players"),
-    CrittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters"),
-    ResourcesFolder = Workspace:FindFirstChild("Resources"),
-    ItemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems"),
-    DeployablesFolder = Workspace:FindFirstChild("Deployables")
+--============================--
+-- Configurações
+--============================--
+local Settings = {
+    -- Deuses
+    GodsESP = false,
+    GodHighlight = true,
+    GodName = true,
+    GodDistance = true,
+    GodVisCheck = true,
+    GodColor = Color3.fromRGB(255, 80, 170),
+    GodMaxDist = 10000,
+    GodDebug = false,
+
+    -- Jogadores
+    PlayersESP = false,
+    PlayerBox2D = false,
+    PlayerBox3D = false,
+    PlayerName = false,
+    PlayerDistance = false,
+    PlayerHealth = false,
+    PlayerHealthBar = false,
+    PlayerSkeleton = false,
+    PlayerChams = false,
+    PlayerVisCheck = false,
+    PlayerColor = Color3.fromRGB(80, 255, 170),
+    PlayerTeamColor = true,
+    PlayerMaxDist = 5000,
 }
 
+local GODS_LIST = {
+    "Old God", "Hateful God", "Miserable God", "Lonely God", "Wealthy God",
+    "Sleeping God", "Ancient God", "Pink God", "Furious God", "Magical God",
+    "Strange God", "Odd God", "Dark God", "Soulless God", "Infinity God",
+}
+
+-- Nomes "limpos" pré-computados UMA vez (evita gsub em cada checagem)
+local CLEAN_GODS = {}
+for i = 1, #GODS_LIST do
+    CLEAN_GODS[i] = (string.gsub(string.lower(GODS_LIST[i]), "[%s_%%-]", ""))
+end
+
+local FALSE_POSITIVES = { "godray" }
+
+local HEAVY_INTERVAL = 0.15  -- raycast/distância/textos (6-7x por segundo)
+local GOD_INTERVAL   = 0.15  -- atualização dos deuses (billboard segue sozinho)
+
+--============================--
+-- Drawing (apenas para Skeleton)
+--============================--
+local DrawingSupported = false
+do
+    local ok = pcall(function()
+        local t = Drawing.new("Line")
+        t:Remove()
+    end)
+    DrawingSupported = ok
+end
+
+local SKELETON_R15 = {
+    {"Head", "UpperTorso"},
+    {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
+}
+
+local SKELETON_R6 = {
+    {"Head", "Torso"},
+    {"Torso", "Left Arm"}, {"Torso", "Right Arm"},
+    {"Torso", "Left Leg"}, {"Torso", "Right Leg"},
+}
+
+--============================--
+-- ANTI-DUPLICAÇÃO
+-- Mata a instância anterior do script (conexões, pastas, desenhos)
+--============================--
+if getgenv().GodsPlayersESP_Destroy then
+    pcall(getgenv().GodsPlayersESP_Destroy)
+end
+
+local Active = true
+local Connections = {}
+local function track(conn)
+    Connections[#Connections + 1] = conn
+    return conn
+end
+
+--============================--
+-- VARREDURA: destruir beacons "GodBeacon" da versão antiga
+-- (conserta o jogo que está travado AGORA)
+--============================--
 task.spawn(function()
-    while true do
-        task.wait(5)
-        CachedRefs.PlayersFolder = Workspace:FindFirstChild("Players")
-        CachedRefs.CrittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
-        CachedRefs.ResourcesFolder = Workspace:FindFirstChild("Resources")
-        CachedRefs.ItemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems")
-        CachedRefs.DeployablesFolder = Workspace:FindFirstChild("Deployables")
-    end
-end)
-
-for _, desc in ipairs(Workspace:GetDescendants()) do
-    if desc:IsA("BillboardGui") and (desc.Name == "ESP" or desc.Name:find("Identical_ESP")) then
-        pcall(function() desc:Destroy() end)
-    end
-end
-
-local function clearESPCategory(prefix)
-    for key, bb in pairs(espStorage) do
-        if key:sub(1, #prefix) == prefix then
-            pcall(function() bb:Destroy() end)
-            espStorage[key] = nil
-        end
-    end
-    if espFolder then
-        for _, child in ipairs(espFolder:GetChildren()) do
-            if child.Name:sub(1, #prefix) == prefix then
-                pcall(function() child:Destroy() end)
-            end
-        end
-    end
-end
-
--- Material 3 Express Colors --
-local Colors = {
-    -- Surface Colors
-    Surface = Color3.fromRGB(245, 248, 255),
-    SurfaceDim = Color3.fromRGB(220, 230, 245),
-    SurfaceBright = Color3.fromRGB(255, 255, 255),
-    SurfaceContainerLowest = Color3.fromRGB(255, 255, 255),
-    SurfaceContainerLow = Color3.fromRGB(235, 242, 255),
-    SurfaceContainer = Color3.fromRGB(215, 228, 250),
-    SurfaceContainerHigh = Color3.fromRGB(195, 214, 245),
-    SurfaceContainerHighest = Color3.fromRGB(175, 200, 240),
-    
-    -- Primary (Blue)
-    Primary = Color3.fromRGB(0, 95, 204),
-    PrimaryContainer = Color3.fromRGB(212, 227, 255),
-    OnPrimary = Color3.fromRGB(255, 255, 255),
-    OnPrimaryContainer = Color3.fromRGB(0, 27, 68),
-    
-    -- Secondary
-    Secondary = Color3.fromRGB(86, 96, 116),
-    SecondaryContainer = Color3.fromRGB(218, 226, 244),
-    OnSecondary = Color3.fromRGB(255, 255, 255),
-    OnSecondaryContainer = Color3.fromRGB(19, 28, 46),
-    
-    -- Tertiary (Cyan)
-    Tertiary = Color3.fromRGB(0, 107, 118),
-    TertiaryContainer = Color3.fromRGB(158, 238, 255),
-    OnTertiary = Color3.fromRGB(255, 255, 255),
-    OnTertiaryContainer = Color3.fromRGB(0, 32, 37),
-    
-    -- Error
-    Error = Color3.fromRGB(186, 26, 26),
-    ErrorContainer = Color3.fromRGB(255, 218, 214),
-    
-    -- Neutral
-    OnSurface = Color3.fromRGB(25, 28, 33),
-    OnSurfaceVariant = Color3.fromRGB(68, 71, 79),
-    Outline = Color3.fromRGB(118, 122, 132),
-    OutlineVariant = Color3.fromRGB(196, 199, 209),
-    InverseSurface = Color3.fromRGB(46, 48, 54),
-    InverseOnSurface = Color3.fromRGB(239, 241, 248),
-    
-    -- Accents
-    AccentGreen = Color3.fromRGB(22, 163, 74),
-    AccentRed = Color3.fromRGB(220, 38, 38),
-    AccentOrange = Color3.fromRGB(234, 88, 12),
-    AccentYellow = Color3.fromRGB(202, 138, 4),
-    AccentPurple = Color3.fromRGB(124, 58, 237),
-    AccentPink = Color3.fromRGB(219, 39, 119),
-    AccentCyan = Color3.fromRGB(8, 145, 178)
-}
-
-local origLighting = {
-    Ambient = Lighting.Ambient, OutdoorAmbient = Lighting.OutdoorAmbient,
-    Brightness = Lighting.Brightness, FogEnd = Lighting.FogEnd
-}
-local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-local origAtmosphereDensity = atmosphere and atmosphere.Density or 0.3
-
--- Config Management --
-local CONFIG_FILE = "Identical/default_v5.json"
-local function LoadSavedConfig()
-    if isfile and isfile(CONFIG_FILE) then
-        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(CONFIG_FILE)) end)
-        if ok and type(data) == "table" then
-            for k, v in pairs(data) do
-                if Config[k] ~= nil then
-                    if k == "UIKeybind" or k == "StopKeybind" then
-                        if type(v) == "string" and Enum.KeyCode[v] then
-                            Config[k] = Enum.KeyCode[v]
-                        elseif typeof(v) == "EnumItem" then
-                            Config[k] = v
-                        end
-                    else
-                        Config[k] = v
-                    end
-                end
-            end
-            return true
-        end
-    end
-    return false
-end
-
-local function AutoSaveConfig()
-    if writefile then
-        pcall(function()
-            if makefolder and not isfolder("Identical") then makefolder("Identical") end
-            local payload = {}
-            for k, v in pairs(Config) do
-                if typeof(v) == "EnumItem" then payload[k] = v.Name else payload[k] = v end
-            end
-            writefile(CONFIG_FILE, HttpService:JSONEncode(payload))
-        end)
-    end
-end
-
-LoadSavedConfig()
-
--- UI Setup --
-local function getGuiParent()
-    local ok, gui = pcall(function() return CoreGui end)
-    if ok and gui then return gui end
-    return LocalPlayer:WaitForChild("PlayerGui")
-end
-
-local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "Identical_v5"
-screenGui.ResetOnSpawn = false
-screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = getGuiParent()
-
-if getgenv then
-    getgenv().IdenticalBoogaUnload = function()
-        pcall(function() screenGui:Destroy() end)
-    end
-end
-
--- Notifications --
-local notifContainer = Instance.new("Frame")
-notifContainer.Name = "Notifications"
-notifContainer.Size = UDim2.new(0, 280, 1, -40)
-notifContainer.Position = UDim2.new(1, -295, 0, 20)
-notifContainer.BackgroundTransparency = 1
-notifContainer.ZIndex = 1000
-notifContainer.Parent = screenGui
-
-local notifLayout = Instance.new("UIListLayout")
-notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
-notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-notifLayout.Padding = UDim.new(0, 8)
-notifLayout.Parent = notifContainer
-
-local function SendNotification(title, text, duration, icon)
-    if not Config.Notifications then return end
-    duration = duration or 3
-    icon = icon or "info"
-
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 60)
-    card.BackgroundColor3 = Colors.SurfaceContainer
-    card.BorderSizePixel = 0
-    card.ClipsDescendants = true
-    card.Parent = notifContainer
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 16)
-    corner.Parent = card
-
-    local shadow = Instance.new("ImageLabel")
-    shadow.Size = UDim2.new(1, 16, 1, 16)
-    shadow.Position = UDim2.new(0, -8, 0, -4)
-    shadow.BackgroundTransparency = 1
-    shadow.Image = "rbxassetid://5554236805"
-    shadow.ImageColor3 = Colors.OnSurface
-    shadow.ImageTransparency = 0.85
-    shadow.ScaleType = Enum.ScaleType.Slice
-    shadow.SliceCenter = Rect.new(23, 23, 277, 277)
-    shadow.ZIndex = -1
-    shadow.Parent = card
-
-    local accent = Instance.new("Frame")
-    accent.Size = UDim2.new(0, 4, 0, 32)
-    accent.Position = UDim2.new(0, 0, 0.5, -16)
-    accent.BackgroundColor3 = Colors.Primary
-    accent.BorderSizePixel = 0
-    accent.Parent = card
-
-    local accentCorner = Instance.new("UICorner")
-    accentCorner.CornerRadius = UDim.new(1, 0)
-    accentCorner.Parent = accent
-
-    local iconLbl = Instance.new("TextLabel")
-    iconLbl.Size = UDim2.new(0, 28, 0, 28)
-    iconLbl.Position = UDim2.new(0, 12, 0.5, -14)
-    iconLbl.BackgroundTransparency = 1
-    iconLbl.Text = icon
-    iconLbl.TextSize = 18
-    iconLbl.Font = Enum.Font.GothamBold
-    iconLbl.TextColor3 = Colors.Primary
-    iconLbl.Parent = card
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, -52, 0, 16)
-    titleLbl.Position = UDim2.new(0, 44, 0, 10)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamBold
-    titleLbl.Text = title
-    titleLbl.TextColor3 = Colors.OnSurface
-    titleLbl.TextSize = 13
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.Parent = card
-
-    local textLbl = Instance.new("TextLabel")
-    textLbl.Size = UDim2.new(1, -52, 0, 28)
-    textLbl.Position = UDim2.new(0, 44, 0, 28)
-    textLbl.BackgroundTransparency = 1
-    textLbl.Font = Enum.Font.Gotham
-    textLbl.Text = text
-    textLbl.TextColor3 = Colors.OnSurfaceVariant
-    textLbl.TextSize = 11
-    textLbl.TextXAlignment = Enum.TextXAlignment.Left
-    textLbl.TextWrapped = true
-    textLbl.Parent = card
-
-    card.Position = card.Position + UDim2.new(1, 10, 0, 0)
-    TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = card.Position - UDim2.new(1, 10, 0, 0)
-    }):Play()
-
-    task.delay(duration, function()
-        TweenService:Create(card, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            BackgroundTransparency = 1, Position = card.Position + UDim2.new(1, 10, 0, 0)
-        }):Play()
-        task.wait(0.25)
-        card:Destroy()
-    end)
-end
-
--- Floating Action Button (FAB) --
-local fab = Instance.new("TextButton")
-fab.Name = "FAB"
-fab.Size = UDim2.new(0, 56, 0, 56)
-fab.Position = UDim2.new(0, 20, 1, -76)
-fab.BackgroundColor3 = Colors.PrimaryContainer
-fab.Text = "≡"
-fab.TextColor3 = Colors.OnPrimaryContainer
-fab.TextSize = 22
-fab.Font = Enum.Font.GothamBold
-fab.ZIndex = 1000
-fab.AutoButtonColor = false
-fab.Visible = false
-fab.Parent = screenGui
-
-local fabCorner = Instance.new("UICorner")
-fabCorner.CornerRadius = UDim.new(0, 16)
-fabCorner.Parent = fab
-
-local fabShadow = Instance.new("ImageLabel")
-fabShadow.Size = UDim2.new(1, 20, 1, 20)
-fabShadow.Position = UDim2.new(0, -10, 0, -6)
-fabShadow.BackgroundTransparency = 1
-fabShadow.Image = "rbxassetid://5554236805"
-fabShadow.ImageColor3 = Colors.Primary
-fabShadow.ImageTransparency = 0.75
-fabShadow.ScaleType = Enum.ScaleType.Slice
-fabShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-fabShadow.ZIndex = -1
-fabShadow.Parent = fab
-
--- Universal Draggable System (Mobile + Desktop) --
-local function makeDraggable(frame, handle)
-    local dragging = false
-    local dragStart = nil
-    local startPos = nil
-
-    handle.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 
-            or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = frame.Position
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
-            or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
-                startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-end
-
--- Main Frame (Compact Size - Material 3) --
-local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 580, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -290, 0.5, -210)
-mainFrame.BackgroundColor3 = Colors.Surface
-mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = true
-mainFrame.Parent = screenGui
-
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 20)
-mainCorner.Parent = mainFrame
-
-local mainShadow = Instance.new("ImageLabel")
-mainShadow.Size = UDim2.new(1, 40, 1, 40)
-mainShadow.Position = UDim2.new(0, -20, 0, -10)
-mainShadow.BackgroundTransparency = 1
-mainShadow.Image = "rbxassetid://5554236805"
-mainShadow.ImageColor3 = Colors.OnSurface
-mainShadow.ImageTransparency = 0.85
-mainShadow.ScaleType = Enum.ScaleType.Slice
-mainShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-mainShadow.ZIndex = -1
-mainShadow.Parent = mainFrame
-
--- Title Bar --
-local titleBar = Instance.new("Frame")
-titleBar.Name = "TitleBar"
-titleBar.Size = UDim2.new(1, 0, 0, 52)
-titleBar.BackgroundColor3 = Colors.Surface
-titleBar.BorderSizePixel = 0
-titleBar.ZIndex = 5
-titleBar.Parent = mainFrame
-
-local titlePad = Instance.new("UIPadding")
-titlePad.PaddingLeft = UDim.new(0, 16)
-titlePad.PaddingRight = UDim.new(0, 16)
-titlePad.Parent = titleBar
-
-local logoIcon = Instance.new("Frame")
-logoIcon.Size = UDim2.new(0, 32, 0, 32)
-logoIcon.Position = UDim2.new(0, 0, 0.5, -16)
-logoIcon.BackgroundColor3 = Colors.Primary
-logoIcon.BorderSizePixel = 0
-logoIcon.ZIndex = 6
-logoIcon.Parent = titleBar
-
-local logoCorner = Instance.new("UICorner")
-logoCorner.CornerRadius = UDim.new(0, 8)
-logoCorner.Parent = logoIcon
-
-local logoText = Instance.new("TextLabel")
-logoText.Size = UDim2.new(1, 0, 1, 0)
-logoText.BackgroundTransparency = 1
-logoText.Text = "ID"
-logoText.TextColor3 = Colors.OnPrimary
-logoText.TextSize = 14
-logoText.Font = Enum.Font.GothamBold
-logoText.Parent = logoIcon
-
-local brandTitle = Instance.new("TextLabel")
-brandTitle.Size = UDim2.new(1, -100, 0, 18)
-brandTitle.Position = UDim2.new(0, 42, 0, 10)
-brandTitle.BackgroundTransparency = 1
-brandTitle.Font = Enum.Font.GothamBold
-brandTitle.Text = "Identical v5.0"
-brandTitle.TextColor3 = Colors.OnSurface
-brandTitle.TextSize = 16
-brandTitle.TextXAlignment = Enum.TextXAlignment.Left
-brandTitle.ZIndex = 6
-brandTitle.Parent = titleBar
-
-local gameSubtitle = Instance.new("TextLabel")
-gameSubtitle.Size = UDim2.new(1, -100, 0, 14)
-gameSubtitle.Position = UDim2.new(0, 42, 0, 28)
-gameSubtitle.BackgroundTransparency = 1
-gameSubtitle.Font = Enum.Font.Gotham
-gameSubtitle.Text = "Booga Booga · Material 3"
-gameSubtitle.TextColor3 = Colors.OnSurfaceVariant
-gameSubtitle.TextSize = 11
-gameSubtitle.TextXAlignment = Enum.TextXAlignment.Left
-gameSubtitle.ZIndex = 6
-gameSubtitle.Parent = titleBar
-
--- Window Controls --
-local winControls = Instance.new("Frame")
-winControls.Size = UDim2.new(0, 68, 0, 32)
-winControls.Position = UDim2.new(1, -68, 0.5, -16)
-winControls.BackgroundTransparency = 1
-winControls.ZIndex = 6
-winControls.Parent = titleBar
-
-local winLayout = Instance.new("UIListLayout")
-winLayout.FillDirection = Enum.FillDirection.Horizontal
-winLayout.SortOrder = Enum.SortOrder.LayoutOrder
-winLayout.Padding = UDim.new(0, 4)
-winLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-winLayout.Parent = winControls
-
-local function createIconButton(icon, onClick, color)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 32, 0, 32)
-    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    btn.BackgroundTransparency = 1
-    btn.Text = icon
-    btn.TextColor3 = color or Colors.OnSurfaceVariant
-    btn.TextSize = 18
-    btn.Font = Enum.Font.GothamBold
-    btn.AutoButtonColor = false
-    btn.ZIndex = 7
-    btn.Parent = winControls
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(1, 0)
-    btnCorner.Parent = btn
-
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.SurfaceContainerHigh, BackgroundTransparency = 0 }):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundTransparency = 1 }):Play()
-    end)
-
-    btn.MouseButton1Click:Connect(onClick)
-    return btn
-end
-
-local ToggleUIVisibility
-local ToggleUIMinimize
-
-local minBtn = createIconButton("—", function() ToggleUIMinimize() end)
-local closeBtn = createIconButton("×", function() UnloadScript() end, Colors.Error)
-
-makeDraggable(mainFrame, titleBar)
-
--- Body Frame --
-local bodyFrame = Instance.new("Frame")
-bodyFrame.Name = "Body"
-bodyFrame.Size = UDim2.new(1, 0, 1, -52)
-bodyFrame.Position = UDim2.new(0, 0, 0, 52)
-bodyFrame.BackgroundTransparency = 1
-bodyFrame.ZIndex = 2
-bodyFrame.Parent = mainFrame
-
--- Sidebar (Compact) --
-local sidebar = Instance.new("Frame")
-sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, 110, 1, 0)
-sidebar.BackgroundColor3 = Colors.SurfaceContainerLow
-sidebar.BorderSizePixel = 0
-sidebar.ZIndex = 3
-sidebar.Parent = bodyFrame
-
--- Search Box --
-local searchBox = Instance.new("TextBox")
-searchBox.Name = "SearchBar"
-searchBox.Size = UDim2.new(1, -16, 0, 32)
-searchBox.Position = UDim2.new(0, 8, 0, 8)
-searchBox.BackgroundColor3 = Colors.SurfaceContainerHigh
-searchBox.Font = Enum.Font.Gotham
-searchBox.PlaceholderText = "Search..."
-searchBox.PlaceholderColor3 = Colors.OnSurfaceVariant
-searchBox.Text = ""
-searchBox.TextColor3 = Colors.OnSurface
-searchBox.TextSize = 12
-searchBox.TextXAlignment = Enum.TextXAlignment.Left
-searchBox.BorderSizePixel = 0
-searchBox.ClearTextOnFocus = false
-searchBox.ZIndex = 4
-searchBox.Parent = sidebar
-
-local searchPad = Instance.new("UIPadding")
-searchPad.PaddingLeft = UDim.new(0, 10)
-searchPad.Parent = searchBox
-
-local searchCorner = Instance.new("UICorner")
-searchCorner.CornerRadius = UDim.new(0, 8)
-searchCorner.Parent = searchBox
-
--- Nav List --
-local navList = Instance.new("ScrollingFrame")
-navList.Name = "NavList"
-navList.Size = UDim2.new(1, -8, 1, -52)
-navList.Position = UDim2.new(0, 4, 0, 48)
-navList.BackgroundTransparency = 1
-navList.BorderSizePixel = 0
-navList.ScrollBarThickness = 0
-navList.CanvasSize = UDim2.new(0, 0, 0, 0)
-navList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-navList.ZIndex = 3
-navList.Parent = sidebar
-
-local navLayout = Instance.new("UIListLayout")
-navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-navLayout.Padding = UDim.new(0, 2)
-navLayout.Parent = navList
-
--- Content Area --
-local contentArea = Instance.new("Frame")
-contentArea.Name = "ContentArea"
-contentArea.Size = UDim2.new(1, -110, 1, 0)
-contentArea.Position = UDim2.new(0, 110, 0, 0)
-contentArea.BackgroundTransparency = 1
-contentArea.ZIndex = 2
-contentArea.Parent = bodyFrame
-
-local tabFrames = {}
-local tabButtons = {}
-local rowSearchIndex = {}
-local ctrls = {}
-
-local function switchTab(tabName)
-    for name, frame in pairs(tabFrames) do frame.Visible = (name == tabName) end
-    for name, btn in pairs(tabButtons) do
-        local pill = btn:FindFirstChild("ActivePill")
-        local icon = btn:FindFirstChild("Icon")
-        if name == tabName then
-            if pill then TweenService:Create(pill, TweenInfo.new(0.2), { Size = UDim2.new(0, 4, 0, 24) }):Play() end
-            if icon then icon.TextColor3 = Colors.OnSecondaryContainer end
-            btn.BackgroundTransparency = 0
-            btn.BackgroundColor3 = Colors.SecondaryContainer
-        else
-            if pill then TweenService:Create(pill, TweenInfo.new(0.2), { Size = UDim2.new(0, 4, 0, 0) }):Play() end
-            if icon then icon.TextColor3 = Colors.OnSurfaceVariant end
-            btn.BackgroundTransparency = 1
-        end
-    end
-end
-
-local function createTab(name, icon)
-    local btn = Instance.new("TextButton")
-    btn.Name = "TabBtn_" .. name
-    btn.Size = UDim2.new(1, 0, 0, 40)
-    btn.BackgroundColor3 = Colors.SecondaryContainer
-    btn.BackgroundTransparency = 1
-    btn.Text = ""
-    btn.AutoButtonColor = false
-    btn.ZIndex = 4
-    btn.Parent = navList
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(1, 0)
-    btnCorner.Parent = btn
-
-    local pill = Instance.new("Frame")
-    pill.Name = "ActivePill"
-    pill.Size = UDim2.new(0, 4, 0, 0)
-    pill.Position = UDim2.new(0, 0, 0.5, 0)
-    pill.AnchorPoint = Vector2.new(0, 0.5)
-    pill.BackgroundColor3 = Colors.Primary
-    pill.BorderSizePixel = 0
-    pill.ZIndex = 5
-    pill.Parent = btn
-
-    local pillCorner = Instance.new("UICorner")
-    pillCorner.CornerRadius = UDim.new(1, 0)
-    pillCorner.Parent = pill
-
-    local iconLabel = Instance.new("TextLabel")
-    iconLabel.Name = "Icon"
-    iconLabel.Size = UDim2.new(0, 24, 0, 24)
-    iconLabel.Position = UDim2.new(0, 14, 0.5, -12)
-    iconLabel.BackgroundTransparency = 1
-    iconLabel.Text = icon or ""
-    iconLabel.TextSize = 16
-    iconLabel.TextColor3 = Colors.OnSurfaceVariant
-    iconLabel.ZIndex = 5
-    iconLabel.Parent = btn
-
-    local textLbl = Instance.new("TextLabel")
-    textLbl.Size = UDim2.new(1, -50, 1, 0)
-    textLbl.Position = UDim2.new(0, 44, 0, 0)
-    textLbl.BackgroundTransparency = 1
-    textLbl.Text = name
-    textLbl.TextColor3 = Colors.OnSurfaceVariant
-    textLbl.TextSize = 12
-    textLbl.Font = Enum.Font.GothamMedium
-    textLbl.TextXAlignment = Enum.TextXAlignment.Left
-    textLbl.ZIndex = 5
-    textLbl.Parent = btn
-
-    btn.MouseEnter:Connect(function()
-        if btn.BackgroundTransparency > 0 then
-            btn.BackgroundTransparency = 0.6
-        end
-    end)
-    btn.MouseLeave:Connect(function()
-        if btn ~= tabButtons[tabName] or btn.BackgroundTransparency == 0.6 then
-            -- Keep active state if active
-            local isActive = btn == tabButtons[name] and btn.BackgroundTransparency == 0
-            if not isActive then
-                btn.BackgroundTransparency = 1
-            end
-        end
-    end)
-
-    btn.MouseButton1Click:Connect(function() switchTab(name) end)
-
-    local page = Instance.new("ScrollingFrame")
-    page.Name = "TabPage_" .. name
-    page.Size = UDim2.new(1, -12, 1, -12)
-    page.Position = UDim2.new(0, 6, 0, 6)
-    page.BackgroundTransparency = 1
-    page.BorderSizePixel = 0
-    page.ScrollBarThickness = 3
-    page.ScrollBarImageColor3 = Colors.Primary
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    page.Visible = false
-    page.ZIndex = 2
-    page.Parent = contentArea
-
-    local pageLayout = Instance.new("UIListLayout")
-    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pageLayout.Padding = UDim.new(0, 10)
-    pageLayout.Parent = page
-
-    local pagePad = Instance.new("UIPadding")
-    pagePad.PaddingTop = UDim.new(0, 6)
-    pagePad.PaddingBottom = UDim.new(0, 10)
-    pagePad.Parent = page
-
-    tabFrames[name] = page
-    tabButtons[name] = btn
-
-    return page
-end
-
-local tabs = {
-    Home = createTab("Home", "🏠"),
-    Combat = createTab("Combat", "⚔️"),
-    Gather = createTab("Gather", "🎯"),
-    Farm = createTab("Farm", "🌾"),
-    ESP = createTab("ESP", "👁️"),
-    Misc = createTab("Misc", "⚙️"),
-    Stats = createTab("Stats", "📊"),
-    Waypoints = createTab("Waypoints", "📍")
-}
-
--- UI Helper Functions (Material 3) --
-local function createCategoryHeader(parent, text)
-    local hdr = Instance.new("Frame")
-    hdr.Size = UDim2.new(1, 0, 0, 28)
-    hdr.BackgroundTransparency = 1
-    hdr.Parent = parent
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -12, 1, 0)
-    lbl.Position = UDim2.new(0, 6, 0, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.Font = Enum.Font.GothamBold
-    lbl.Text = string.upper(text)
-    lbl.TextColor3 = Colors.Primary
-    lbl.TextSize = 11
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = hdr
-    return hdr
-end
-
-local function createCardGroup(parent)
-    local group = Instance.new("Frame")
-    group.Size = UDim2.new(1, 0, 0, 0)
-    group.AutomaticSize = Enum.AutomaticSize.Y
-    group.BackgroundColor3 = Colors.SurfaceContainerLow
-    group.BorderSizePixel = 0
-    group.Parent = parent
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 16)
-    corner.Parent = group
-
-    local layout = Instance.new("UIListLayout")
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 0)
-    layout.Parent = group
-
-    return group
-end
-
-local function createBaseRow(parent, labelText, descText, indexSearch)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 50)
-    row.BackgroundColor3 = Colors.SurfaceContainerLowest
-    row.BorderSizePixel = 0
-    row.Parent = parent
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 14)
-    pad.PaddingRight = UDim.new(0, 14)
-    pad.Parent = row
-
-    local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -170, 1, 0)
-    textFrame.BackgroundTransparency = 1
-    textFrame.Parent = row
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, 0, 0, 16)
-    titleLbl.Position = UDim2.new(0, 0, 0, 8)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamMedium
-    titleLbl.Text = labelText
-    titleLbl.TextColor3 = Colors.OnSurface
-    titleLbl.TextSize = 13
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.Parent = textFrame
-
-    local descLbl = Instance.new("TextLabel")
-    descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 26)
-    descLbl.BackgroundTransparency = 1
-    descLbl.Font = Enum.Font.Gotham
-    descLbl.Text = descText or ""
-    descLbl.TextColor3 = Colors.OnSurfaceVariant
-    descLbl.TextSize = 10
-    descLbl.TextXAlignment = Enum.TextXAlignment.Left
-    descLbl.Parent = textFrame
-
-    if indexSearch ~= false then
-        table.insert(rowSearchIndex, {
-            frame = row,
-            query = (labelText .. " " .. (descText or "")):lower()
-        })
-    end
-
-    return row
-end
-
--- FIXED Toggle Row with proper mobile support --
-local function createToggleRow(parent, labelText, descText, initialVal, callback, indexSearch)
-    local row = createBaseRow(parent, labelText, descText, indexSearch)
-    local state = initialVal or false
-
-    -- Switch container (Material 3 style)
-    local switchContainer = Instance.new("TextButton")
-    switchContainer.Size = UDim2.new(0, 48, 0, 28)
-    switchContainer.Position = UDim2.new(1, -48, 0.5, -14)
-    switchContainer.BackgroundColor3 = state and Colors.Primary or Colors.SurfaceContainerHighest
-    switchContainer.Text = ""
-    switchContainer.BorderSizePixel = 0
-    switchContainer.AutoButtonColor = false
-    switchContainer.ZIndex = 5
-    switchContainer.Parent = row
-
-    local switchCorner = Instance.new("UICorner")
-    switchCorner.CornerRadius = UDim.new(1, 0)
-    switchCorner.Parent = switchContainer
-
-    -- Outline when off
-    local switchOutline = Instance.new("UIStroke")
-    switchOutline.Color = Colors.Outline
-    switchOutline.Thickness = 1.5
-    switchOutline.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    switchOutline.Transparency = state and 1 or 0
-    switchOutline.Parent = switchContainer
-
-    -- Knob
-    local knob = Instance.new("Frame")
-    knob.Size = state and UDim2.new(0, 22, 0, 22) or UDim2.new(0, 14, 0, 14)
-    knob.Position = state and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 5, 0.5, -7)
-    knob.BackgroundColor3 = state and Colors.OnPrimary or Colors.Outline
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 6
-    knob.Parent = switchContainer
-
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = knob
-
-    local function updateVisuals()
-        TweenService:Create(switchContainer, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
-            BackgroundColor3 = state and Colors.Primary or Colors.SurfaceContainerHighest
-        }):Play()
-        TweenService:Create(switchOutline, TweenInfo.new(0.2), {
-            Transparency = state and 1 or 0
-        }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
-            Size = state and UDim2.new(0, 22, 0, 22) or UDim2.new(0, 14, 0, 14),
-            Position = state and UDim2.new(1, -25, 0.5, -11) or UDim2.new(0, 5, 0.5, -7),
-            BackgroundColor3 = state and Colors.OnPrimary or Colors.Outline
-        }):Play()
-    end
-
-    local function toggle()
-        state = not state
-        updateVisuals()
-        if callback then callback(state) end
-        AutoSaveConfig()
-    end
-
-    -- Works on both Mobile and Desktop
-    switchContainer.Activated:Connect(toggle)
-    switchContainer.MouseButton1Click:Connect(function() end) -- Prevent double-trigger
-
-    return {
-        frame = row,
-        SetState = function(val)
-            state = val
-            updateVisuals()
-        end
-    }
-end
-
--- FIXED Slider Row with proper mobile support --
-local function createSliderRow(parent, labelText, descText, minVal, maxVal, initialVal, isFloat, suffix, callback,
-                               indexSearch)
-    local row = createBaseRow(parent, labelText, descText, indexSearch)
-    local currentVal = initialVal or minVal
-    suffix = suffix or ""
-
-    local container = Instance.new("Frame")
-    container.Size = UDim2.new(0, 155, 0, 28)
-    container.Position = UDim2.new(1, -155, 0.5, -14)
-    container.BackgroundTransparency = 1
-    container.Parent = row
-
-    local valLabel = Instance.new("TextLabel")
-    valLabel.Size = UDim2.new(0, 50, 1, 0)
-    valLabel.Position = UDim2.new(1, -50, 0, 0)
-    valLabel.BackgroundTransparency = 1
-    valLabel.Font = Enum.Font.GothamBold
-    valLabel.Text = isFloat and string.format("%.1f", currentVal) .. suffix or tostring(math.floor(currentVal)) .. suffix
-    valLabel.TextColor3 = Colors.Primary
-    valLabel.TextSize = 11
-    valLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valLabel.Parent = container
-
-    -- Track (using TextButton so Activated works on mobile)
-    local track = Instance.new("TextButton")
-    track.Size = UDim2.new(1, -55, 0, 4)
-    track.Position = UDim2.new(0, 0, 0.5, -2)
-    track.BackgroundColor3 = Colors.SurfaceContainerHighest
-    track.BorderSizePixel = 0
-    track.AutoButtonColor = false
-    track.Text = ""
-    track.Parent = container
-
-    local trackCorner = Instance.new("UICorner")
-    trackCorner.CornerRadius = UDim.new(1, 0)
-    trackCorner.Parent = track
-
-    local fill = Instance.new("Frame")
-    local pct = math.clamp((currentVal - minVal) / (maxVal - minVal), 0, 1)
-    fill.Size = UDim2.new(pct, 0, 1, 0)
-    fill.BackgroundColor3 = Colors.Primary
-    fill.BorderSizePixel = 0
-    fill.Parent = track
-
-    local fillCorner = Instance.new("UICorner")
-    fillCorner.CornerRadius = UDim.new(1, 0)
-    fillCorner.Parent = fill
-
-    -- Knob
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 18, 0, 18)
-    knob.Position = UDim2.new(pct, -9, 0.5, -9)
-    knob.BackgroundColor3 = Colors.Primary
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 2
-    knob.Parent = track
-
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = knob
-
-    local knobShadow = Instance.new("ImageLabel")
-    knobShadow.Size = UDim2.new(1, 8, 1, 8)
-    knobShadow.Position = UDim2.new(0, -4, 0, -2)
-    knobShadow.BackgroundTransparency = 1
-    knobShadow.Image = "rbxassetid://5554236805"
-    knobShadow.ImageColor3 = Colors.Primary
-    knobShadow.ImageTransparency = 0.7
-    knobShadow.ScaleType = Enum.ScaleType.Slice
-    knobShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-    knobShadow.ZIndex = 1
-    knobShadow.Parent = knob
-
-    local sliding = false
-    
-    local function updateValueFromX(x)
-        local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        local val = minVal + (maxVal - minVal) * rel
-        if not isFloat then val = math.floor(val + 0.5) end
-        currentVal = val
-        fill.Size = UDim2.new(rel, 0, 1, 0)
-        knob.Position = UDim2.new(rel, -9, 0.5, -9)
-        valLabel.Text = isFloat and string.format("%.1f", val) .. suffix or tostring(val) .. suffix
-        AutoSaveConfig()
-        if callback then callback(val) end
-    end
-
-    -- FIXED: Universal input handling for both Mobile and Desktop
-    track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 
-            or input.UserInputType == Enum.UserInputType.Touch then
-            sliding = true
-            updateValueFromX(input.Position.X)
-            
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    sliding = false
-                end
-            end)
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(input)
-        if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement 
-            or input.UserInputType == Enum.UserInputType.Touch) then
-            updateValueFromX(input.Position.X)
-        end
-    end)
-
-    return {
-        frame = row,
-        SetValue = function(val)
-            currentVal = val
-            local p = math.clamp((val - minVal) / (maxVal - minVal), 0, 1)
-            fill.Size = UDim2.new(p, 0, 1, 0)
-            knob.Position = UDim2.new(p, -9, 0.5, -9)
-            valLabel.Text = isFloat and string.format("%.1f", val) .. suffix or tostring(math.floor(val)) .. suffix
-        end
-    }
-end
-
-local function createDropdownRow(parent, labelText, descText, options, initialVal, callback, indexSearch)
-    local selected = initialVal or options[1]
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 50)
-    row.AutomaticSize = Enum.AutomaticSize.Y
-    row.BackgroundColor3 = Colors.SurfaceContainerLowest
-    row.BorderSizePixel = 0
-    row.ClipsDescendants = true
-    row.Parent = parent
-
-    local rowLayout = Instance.new("UIListLayout")
-    rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    rowLayout.Padding = UDim.new(0, 2)
-    rowLayout.Parent = row
-
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 50)
-    header.BackgroundTransparency = 1
-    header.Parent = row
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 14)
-    pad.PaddingRight = UDim.new(0, 14)
-    pad.Parent = header
-
-    local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -135, 1, 0)
-    textFrame.BackgroundTransparency = 1
-    textFrame.Parent = header
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, 0, 0, 16)
-    titleLbl.Position = UDim2.new(0, 0, 0, 8)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamMedium
-    titleLbl.Text = labelText
-    titleLbl.TextColor3 = Colors.OnSurface
-    titleLbl.TextSize = 13
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.Parent = textFrame
-
-    local descLbl = Instance.new("TextLabel")
-    descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 26)
-    descLbl.BackgroundTransparency = 1
-    descLbl.Font = Enum.Font.Gotham
-    descLbl.Text = descText or ""
-    descLbl.TextColor3 = Colors.OnSurfaceVariant
-    descLbl.TextSize = 10
-    descLbl.TextXAlignment = Enum.TextXAlignment.Left
-    descLbl.Parent = textFrame
-
-    -- Material 3 Outlined Button
-    local ddBtn = Instance.new("TextButton")
-    ddBtn.Size = UDim2.new(0, 120, 0, 32)
-    ddBtn.Position = UDim2.new(1, -120, 0.5, -16)
-    ddBtn.BackgroundColor3 = Colors.SurfaceContainerLow
-    ddBtn.Font = Enum.Font.GothamMedium
-    ddBtn.Text = tostring(selected) .. "  ▾"
-    ddBtn.TextColor3 = Colors.Primary
-    ddBtn.TextSize = 11
-    ddBtn.BorderSizePixel = 0
-    ddBtn.AutoButtonColor = false
-    ddBtn.Parent = header
-
-    local ddCorner = Instance.new("UICorner")
-    ddCorner.CornerRadius = UDim.new(0, 8)
-    ddCorner.Parent = ddBtn
-
-    local ddOutline = Instance.new("UIStroke")
-    ddOutline.Color = Colors.Primary
-    ddOutline.Thickness = 1
-    ddOutline.Transparency = 0.5
-    ddOutline.Parent = ddBtn
-
-    local optionsContainer = Instance.new("Frame")
-    optionsContainer.Size = UDim2.new(1, 0, 0, 0)
-    optionsContainer.AutomaticSize = Enum.AutomaticSize.Y
-    optionsContainer.BackgroundColor3 = Colors.SurfaceContainer
-    optionsContainer.Visible = false
-    optionsContainer.ZIndex = 10
-    optionsContainer.Parent = row
-
-    local optPad = Instance.new("UIPadding")
-    optPad.PaddingTop = UDim.new(0, 6)
-    optPad.PaddingBottom = UDim.new(0, 6)
-    optPad.PaddingLeft = UDim.new(0, 6)
-    optPad.PaddingRight = UDim.new(0, 6)
-    optPad.Parent = optionsContainer
-
-    local optList = Instance.new("UIListLayout")
-    optList.SortOrder = Enum.SortOrder.LayoutOrder
-    optList.Padding = UDim.new(0, 2)
-    optList.Parent = optionsContainer
-
-    local optButtons = {}
-    for _, opt in ipairs(options) do
-        local optBtn = Instance.new("TextButton")
-        optBtn.Size = UDim2.new(1, 0, 0, 32)
-        optBtn.BackgroundColor3 = (opt == selected) and Colors.PrimaryContainer or Colors.SurfaceContainerLowest
-        optBtn.Font = Enum.Font.GothamMedium
-        optBtn.Text = (opt == selected and "✓ " or "  ") .. tostring(opt)
-        optBtn.TextColor3 = (opt == selected) and Colors.OnPrimaryContainer or Colors.OnSurface
-        optBtn.TextSize = 11
-        optBtn.TextXAlignment = Enum.TextXAlignment.Left
-        optBtn.BorderSizePixel = 0
-        optBtn.AutoButtonColor = false
-        optBtn.ZIndex = 11
-        optBtn.Parent = optionsContainer
-
-        local oCorner = Instance.new("UICorner")
-        oCorner.CornerRadius = UDim.new(0, 8)
-        oCorner.Parent = optBtn
-
-        local oPad = Instance.new("UIPadding")
-        oPad.PaddingLeft = UDim.new(0, 12)
-        oPad.Parent = optBtn
-
-        optButtons[opt] = optBtn
-
-        local function selectOption()
-            selected = opt
-            ddBtn.Text = tostring(opt) .. "  ▾"
-            optionsContainer.Visible = false
-            for oName, b in pairs(optButtons) do
-                b.BackgroundColor3 = (oName == opt) and Colors.PrimaryContainer or Colors.SurfaceContainerLowest
-                b.TextColor3 = (oName == opt) and Colors.OnPrimaryContainer or Colors.OnSurface
-                b.Text = (oName == opt and "✓ " or "  ") .. tostring(oName)
-            end
-            AutoSaveConfig()
-            if callback then callback(opt) end
-        end
-
-        optBtn.Activated:Connect(selectOption)
-    end
-
-    ddBtn.Activated:Connect(function()
-        optionsContainer.Visible = not optionsContainer.Visible
-        ddBtn.Text = tostring(selected) .. (optionsContainer.Visible and "  ▴" or "  ▾")
-    end)
-
-    if indexSearch ~= false then
-        table.insert(rowSearchIndex, {
-            frame = row,
-            query = (labelText .. " " .. (descText or "")):lower()
-        })
-    end
-
-    return {
-        frame = row,
-        SetSelected = function(opt)
-            selected = opt
-            ddBtn.Text = tostring(opt) .. "  ▾"
-            for oName, b in pairs(optButtons) do
-                b.BackgroundColor3 = (oName == opt) and Colors.PrimaryContainer or Colors.SurfaceContainerLowest
-                b.TextColor3 = (oName == opt) and Colors.OnPrimaryContainer or Colors.OnSurface
-                b.Text = (oName == opt and "✓ " or "  ") .. tostring(oName)
-            end
-        end
-    }
-end
-
-local function createSearchDropdownRow(parent, labelText, descText, options, initialVal, callback, indexSearch)
-    local selected = initialVal or options[1] or ""
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 50)
-    row.AutomaticSize = Enum.AutomaticSize.Y
-    row.BackgroundColor3 = Colors.SurfaceContainerLowest
-    row.BorderSizePixel = 0
-    row.ClipsDescendants = true
-    row.Parent = parent
-
-    local rowLayout = Instance.new("UIListLayout")
-    rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    rowLayout.Padding = UDim.new(0, 2)
-    rowLayout.Parent = row
-
-    local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 50)
-    header.BackgroundTransparency = 1
-    header.Parent = row
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 14)
-    pad.PaddingRight = UDim.new(0, 14)
-    pad.Parent = header
-
-    local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -150, 1, 0)
-    textFrame.BackgroundTransparency = 1
-    textFrame.Parent = header
-
-    local titleLbl = Instance.new("TextLabel")
-    titleLbl.Size = UDim2.new(1, 0, 0, 16)
-    titleLbl.Position = UDim2.new(0, 0, 0, 8)
-    titleLbl.BackgroundTransparency = 1
-    titleLbl.Font = Enum.Font.GothamMedium
-    titleLbl.Text = labelText
-    titleLbl.TextColor3 = Colors.OnSurface
-    titleLbl.TextSize = 13
-    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
-    titleLbl.Parent = textFrame
-
-    local descLbl = Instance.new("TextLabel")
-    descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 26)
-    descLbl.BackgroundTransparency = 1
-    descLbl.Font = Enum.Font.Gotham
-    descLbl.Text = descText or ""
-    descLbl.TextColor3 = Colors.OnSurfaceVariant
-    descLbl.TextSize = 10
-    descLbl.TextXAlignment = Enum.TextXAlignment.Left
-    descLbl.Parent = textFrame
-
-    local searchContainer = Instance.new("Frame")
-    searchContainer.Size = UDim2.new(0, 135, 0, 32)
-    searchContainer.Position = UDim2.new(1, -135, 0.5, -16)
-    searchContainer.BackgroundColor3 = Colors.SurfaceContainerLow
-    searchContainer.BorderSizePixel = 0
-    searchContainer.Parent = header
-
-    local scCorner = Instance.new("UICorner")
-    scCorner.CornerRadius = UDim.new(0, 8)
-    scCorner.Parent = searchContainer
-
-    local scStroke = Instance.new("UIStroke")
-    scStroke.Color = Colors.Outline
-    scStroke.Thickness = 1
-    scStroke.Parent = searchContainer
-
-    local searchBoxLocal = Instance.new("TextBox")
-    searchBoxLocal.Size = UDim2.new(1, -26, 1, 0)
-    searchBoxLocal.Position = UDim2.new(0, 10, 0, 0)
-    searchBoxLocal.BackgroundTransparency = 1
-    searchBoxLocal.Font = Enum.Font.GothamMedium
-    searchBoxLocal.PlaceholderText = "Search..."
-    searchBoxLocal.PlaceholderColor3 = Colors.OnSurfaceVariant
-    searchBoxLocal.Text = tostring(selected)
-    searchBoxLocal.TextColor3 = Colors.OnSurface
-    searchBoxLocal.TextSize = 11
-    searchBoxLocal.TextXAlignment = Enum.TextXAlignment.Left
-    searchBoxLocal.ClearTextOnFocus = false
-    searchBoxLocal.Parent = searchContainer
-
-    local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 22, 1, 0)
-    toggleBtn.Position = UDim2.new(1, -24, 0, 0)
-    toggleBtn.BackgroundTransparency = 1
-    toggleBtn.Font = Enum.Font.GothamBold
-    toggleBtn.Text = "▾"
-    toggleBtn.TextColor3 = Colors.Primary
-    toggleBtn.TextSize = 11
-    toggleBtn.Parent = searchContainer
-
-    local scrollContainer = Instance.new("ScrollingFrame")
-    scrollContainer.Size = UDim2.new(1, -16, 0, 150)
-    scrollContainer.Position = UDim2.new(0, 8, 0, 0)
-    scrollContainer.BackgroundColor3 = Colors.SurfaceContainer
-    scrollContainer.BorderSizePixel = 0
-    scrollContainer.ScrollBarThickness = 3
-    scrollContainer.ScrollBarImageColor3 = Colors.Primary
-    scrollContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    scrollContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-    scrollContainer.Visible = false
-    scrollContainer.ZIndex = 15
-    scrollContainer.Parent = row
-
-    local sCorner = Instance.new("UICorner")
-    sCorner.CornerRadius = UDim.new(0, 8)
-    sCorner.Parent = scrollContainer
-
-    local sShadow = Instance.new("ImageLabel")
-    sShadow.Size = UDim2.new(1, 20, 1, 20)
-    sShadow.Position = UDim2.new(0, -10, 0, -6)
-    sShadow.BackgroundTransparency = 1
-    sShadow.Image = "rbxassetid://5554236805"
-    sShadow.ImageColor3 = Colors.OnSurface
-    sShadow.ImageTransparency = 0.85
-    sShadow.ScaleType = Enum.ScaleType.Slice
-    sShadow.SliceCenter = Rect.new(23, 23, 277, 277)
-    sShadow.ZIndex = 14
-    sShadow.Parent = scrollContainer
-
-    local sPad = Instance.new("UIPadding")
-    sPad.PaddingTop = UDim.new(0, 4)
-    sPad.PaddingBottom = UDim.new(0, 4)
-    sPad.PaddingLeft = UDim.new(0, 4)
-    sPad.PaddingRight = UDim.new(0, 4)
-    sPad.Parent = scrollContainer
-
-    local sList = Instance.new("UIListLayout")
-    sList.SortOrder = Enum.SortOrder.LayoutOrder
-    sList.Padding = UDim.new(0, 2)
-    sList.Parent = scrollContainer
-
-    local function populateOptions(filterQuery)
-        for _, child in ipairs(scrollContainer:GetChildren()) do
-            if child:IsA("TextButton") or child:IsA("TextLabel") then child:Destroy() end
-        end
-
-        local q = (filterQuery or ""):lower():gsub("^%s*(.-)%s*$", "%1")
-        local count = 0
-
-        for _, opt in ipairs(options) do
-            local optName = tostring(opt)
-            if q == "" or optName:lower():find(q, 1, true) then
-                count = count + 1
-                local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 28)
-                btn.BackgroundColor3 = (optName == selected) and Colors.PrimaryContainer or Colors.SurfaceContainerLowest
-                btn.BorderSizePixel = 0
-                btn.Font = Enum.Font.GothamMedium
-                btn.Text = (optName == selected and "✓ " or "  ") .. optName
-                btn.TextColor3 = (optName == selected) and Colors.OnPrimaryContainer or Colors.OnSurface
-                btn.TextSize = 11
-                btn.TextXAlignment = Enum.TextXAlignment.Left
-                btn.AutoButtonColor = false
-                btn.ZIndex = 16
-                btn.Parent = scrollContainer
-
-                local bCorner = Instance.new("UICorner")
-                bCorner.CornerRadius = UDim.new(0, 6)
-                bCorner.Parent = btn
-
-                local bPad = Instance.new("UIPadding")
-                bPad.PaddingLeft = UDim.new(0, 10)
-                bPad.Parent = btn
-
-                btn.Activated:Connect(function()
-                    selected = optName
-                    searchBoxLocal.Text = optName
-                    scrollContainer.Visible = false
-                    toggleBtn.Text = "▾"
-                    AutoSaveConfig()
-                    if callback then callback(optName) end
-                end)
-            end
-        end
-
-        if count == 0 then
-            local emptyLbl = Instance.new("TextLabel")
-            emptyLbl.Size = UDim2.new(1, 0, 0, 28)
-            emptyLbl.BackgroundTransparency = 1
-            emptyLbl.Font = Enum.Font.Gotham
-            emptyLbl.Text = "No results"
-            emptyLbl.TextColor3 = Colors.OnSurfaceVariant
-            emptyLbl.TextSize = 10
-            emptyLbl.ZIndex = 16
-            emptyLbl.Parent = scrollContainer
-        end
-    end
-
-    searchBoxLocal.Focused:Connect(function()
-        scrollContainer.Visible = true
-        toggleBtn.Text = "▴"
-        populateOptions(searchBoxLocal.Text)
-        TweenService:Create(scStroke, TweenInfo.new(0.15), { Color = Colors.Primary, Thickness = 2 }):Play()
-    end)
-
-    searchBoxLocal.FocusLost:Connect(function()
-        TweenService:Create(scStroke, TweenInfo.new(0.15), { Color = Colors.Outline, Thickness = 1 }):Play()
-        local text = searchBoxLocal.Text:gsub("^%s*(.-)%s*$", "%1")
-        if text ~= "" then
-            local found = nil
-            for _, opt in ipairs(options) do
-                if opt:lower() == text:lower() then found = opt break end
-            end
-            selected = found or text
-            searchBoxLocal.Text = selected
-            AutoSaveConfig()
-            if callback then callback(selected) end
-        end
-        task.delay(0.15, function()
-            if not searchBoxLocal:IsFocused() then
-                scrollContainer.Visible = false
-                toggleBtn.Text = "▾"
-            end
-        end)
-    end)
-
-    searchBoxLocal:GetPropertyChangedSignal("Text"):Connect(function()
-        if scrollContainer.Visible then populateOptions(searchBoxLocal.Text) end
-    end)
-
-    toggleBtn.Activated:Connect(function()
-        scrollContainer.Visible = not scrollContainer.Visible
-        toggleBtn.Text = scrollContainer.Visible and "▴" or "▾"
-        if scrollContainer.Visible then populateOptions(searchBoxLocal.Text) end
-    end)
-
-    if indexSearch ~= false then
-        table.insert(rowSearchIndex, {
-            frame = row,
-            query = (labelText .. " " .. (descText or "")):lower()
-        })
-    end
-
-    return {
-        frame = row,
-        SetValue = function(val) selected = val searchBoxLocal.Text = tostring(val) end,
-        SetSelected = function(val) selected = val searchBoxLocal.Text = tostring(val) end
-    }
-end
-
-local function createInfoRow(parent, labelText, valueText, indexSearch)
-    local row = createBaseRow(parent, labelText, "", indexSearch)
-    local valLbl = Instance.new("TextLabel")
-    valLbl.Size = UDim2.new(0, 130, 1, 0)
-    valLbl.Position = UDim2.new(1, -130, 0, 0)
-    valLbl.BackgroundTransparency = 1
-    valLbl.Font = Enum.Font.GothamBold
-    valLbl.Text = valueText
-    valLbl.TextColor3 = Colors.Primary
-    valLbl.TextSize = 11
-    valLbl.TextXAlignment = Enum.TextXAlignment.Right
-    valLbl.Parent = row
-
-    return {
-        frame = row,
-        SetValue = function(newVal) valLbl.Text = newVal end
-    }
-end
-
-local function createButtonRow(parent, labelText, btnText, descText, callback, indexSearch)
-    local row = createBaseRow(parent, labelText, descText, indexSearch)
-    
-    -- Material 3 Filled Tonal Button
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 90, 0, 32)
-    btn.Position = UDim2.new(1, -90, 0.5, -16)
-    btn.BackgroundColor3 = Colors.SecondaryContainer
-    btn.Font = Enum.Font.GothamMedium
-    btn.Text = btnText
-    btn.TextColor3 = Colors.OnSecondaryContainer
-    btn.TextSize = 11
-    btn.BorderSizePixel = 0
-    btn.AutoButtonColor = false
-    btn.Parent = row
-
-    local btnCorner = Instance.new("UICorner")
-    btnCorner.CornerRadius = UDim.new(0, 10)
-    btnCorner.Parent = btn
-
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.SurfaceContainerHighest }):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.SecondaryContainer }):Play()
-    end)
-
-    btn.Activated:Connect(callback)
-    return row
-end
-
--- HOME TAB --
-createCategoryHeader(tabs.Home, "System Status")
-local homeStatusCard = createCardGroup(tabs.Home)
-local runStatusRow = createInfoRow(homeStatusCard, "Status", "Ready", true)
-createInfoRow(homeStatusCard, "Target", "Booga Booga", true)
-createInfoRow(homeStatusCard, "Version", "v5.0", true)
-
-createCategoryHeader(tabs.Home, "Emergency Controls")
-local homeEmergencyCard = createCardGroup(tabs.Home)
-
-local function EmergencyStop()
-    Config.CombatAura = false; Config.ResourceAura = false; Config.CritterAura = false
-    Config.AutoFarm = false; Config.AutoPickup = false; Config.AutoChest = false
-    Config.AutoCraft = false; Config.AutoPlant = false; Config.AutoProcess = false
-    Config.ThreatProtection = false; Config.BowAimbot = false; Config.AutoFishing = false
-
-    for name, c in pairs(ctrls) do
-        if c.SetState and Config[name] ~= nil then c.SetState(false) end
-    end
-
-    runStatusRow.SetValue("HALTED")
-    SendNotification("Identical", "Emergency Stop triggered", 3, "⚠️")
-end
-
-createButtonRow(homeEmergencyCard, "Stop All", "STOP", "Disable all features", EmergencyStop, true)
-
-createCategoryHeader(tabs.Home, "Configuration")
-local homeConfigCard = createCardGroup(tabs.Home)
-createButtonRow(homeConfigCard, "Save Config", "SAVE", "Save to disk", function()
-    AutoSaveConfig()
-    SendNotification("Identical", "Config saved!", 2, "💾")
-end, true)
-
-local SyncUIWithConfig
-
-createButtonRow(homeConfigCard, "Load Config", "LOAD", "Reload from file", function()
-    if LoadSavedConfig() then
-        if SyncUIWithConfig then SyncUIWithConfig() end
-        SendNotification("Identical", "Config loaded!", 2, "📂")
-    end
-end, true)
-
-createButtonRow(homeConfigCard, "Export", "EXPORT", "Copy to clipboard", function()
-    local ok, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
-    if ok and encoded and setclipboard then
-        setclipboard(encoded)
-        SendNotification("Identical", "Copied to clipboard!", 2, "📋")
-    end
-end, true)
-
-createButtonRow(homeConfigCard, "Import", "IMPORT", "Load from clipboard", function()
-    if getclipboard then
-        local raw = getclipboard()
-        local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
-        if ok and type(data) == "table" then
-            for k, v in pairs(data) do if Config[k] ~= nil then Config[k] = v end end
-            if SyncUIWithConfig then SyncUIWithConfig() end
-            AutoSaveConfig()
-            SendNotification("Identical", "Imported!", 2, "📥")
-        else
-            SendNotification("Identical", "Parse failed!", 2, "❌")
-        end
-    end
-end, true)
-
-local origHitboxSizes = {}
-local function resetHitboxes()
-    local playersFolder = CachedRefs.PlayersFolder
-    if playersFolder then
-        for _, pChar in ipairs(playersFolder:GetChildren()) do
-            local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-            if pRoot and origHitboxSizes[pRoot] then
-                pRoot.Size = origHitboxSizes[pRoot]
-                pRoot.Transparency = 1
-                pRoot.CanCollide = false
-            end
-        end
-    end
-end
-
-local function UnloadScript()
-    for _, conn in ipairs(activeConnections) do pcall(function() conn:Disconnect() end) end
-    table.clear(activeConnections)
-
-    for _, bb in pairs(espStorage) do pcall(function() bb:Destroy() end) end
-    table.clear(espStorage)
-    if espFolder then pcall(function() espFolder:ClearAllChildren() end) end
-
-    pcall(function()
-        Lighting.Ambient = origLighting.Ambient
-        Lighting.OutdoorAmbient = origLighting.OutdoorAmbient
-        Lighting.Brightness = origLighting.Brightness
-        Lighting.FogEnd = origLighting.FogEnd
-        local a = Lighting:FindFirstChildOfClass("Atmosphere")
-        if a then a.Density = origAtmosphereDensity end
-    end)
-
-    pcall(function()
-        local char = LocalPlayer.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if hum then hum.WalkSpeed = 16 hum.JumpPower = 50 end
-        resetHitboxes()
-    end)
-
-    pcall(function() screenGui:Destroy() end)
-    if getgenv then getgenv().IdenticalBoogaUnload = nil end
-end
-
-createButtonRow(homeConfigCard, "Unload", "UNLOAD", "Remove script", UnloadScript, true)
-
-local function QueueScriptForTeleport()
-    local qot = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
-    if qot then
-        pcall(function()
-            local queued = false
-            if isfile and isfile("Identical_Booga_v5.lua") then
-                qot([[repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
-                    task.wait(0.5) if isfile and isfile("Identical_Booga_v5.lua") then loadfile("Identical_Booga_v5.lua")() end]])
-                queued = true
-            end
-            if not queued and getgenv and getgenv().IdenticalScriptSource then qot(getgenv().IdenticalScriptSource) end
-        end)
-    end
-end
-
-local function ServerHop()
-    QueueScriptForTeleport()
-    SendNotification("Identical", "Searching servers...", 2, "🌐")
-    local TeleportService = game:GetService("TeleportService")
-    local placeId = game.PlaceId
-    local jobId = game.JobId
-    local url = "https://games.roblox.com/v1/games/" .. tostring(placeId) .. "/servers/Public?sortOrder=Desc&limit=100"
-    local ok, res = pcall(function()
-        if request then return request({ Url = url, Method = "GET" }).Body
-        elseif http_request then return http_request({ Url = url, Method = "GET" }).Body
-        else return game:HttpGet(url) end
-    end)
-    if ok and res then
-        local dataOk, data = pcall(function() return HttpService:JSONDecode(res) end)
-        if dataOk and data and data.data then
-            local candidates = {}
-            for _, s in ipairs(data.data) do
-                if type(s) == "table" and s.id and s.id ~= jobId and (s.playing or 0) < (s.maxPlayers or 40) and (s.playing or 0) > 0 then
-                    table.insert(candidates, s.id)
-                end
-            end
-            if #candidates > 0 then
-                local chosen = candidates[math.random(1, #candidates)]
-                SendNotification("Identical", "Teleporting...", 3, "🚀")
-                pcall(function() TeleportService:TeleportToPlaceInstance(placeId, chosen, LocalPlayer) end)
-                return
-            end
-        end
-    end
-    pcall(function() TeleportService:Teleport(placeId, LocalPlayer) end)
-end
-
-local function RejoinServer()
-    QueueScriptForTeleport()
-    SendNotification("Identical", "Rejoining...", 2, "🔄")
-    pcall(function() game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer) end)
-end
-
-local allCraftableRecipes = {}
-pcall(function()
-    local ItemData = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("ItemData") and
-        require(RS.Modules.ItemData)
-    if ItemData then
-        for name, v in pairs(ItemData) do
-            if type(v) == "table" and v.recipe then table.insert(allCraftableRecipes, name) end
+    local descendants = Workspace:GetDescendants()
+    for i = 1, #descendants do
+        local inst = descendants[i]
+        if inst.Name == "GodBeacon" then
+            pcall(function() inst:Destroy() end)
         end
     end
 end)
-table.sort(allCraftableRecipes)
-if #allCraftableRecipes == 0 then
-    allCraftableRecipes = { "Campfire", "Chest", "Plant Box", "Stone Pick", "Stone Axe", "Wooden Wall", "Wooden Door",
-        "Adurite Axe", "Adurite Pick", "Iron Axe", "Iron Pick", "Steel Axe", "Steel Pick", "Gold Axe", "Gold Pick", "Arrow", "Bow" }
+
+--============================--
+-- Containers
+--============================--
+for _, name in ipairs({"GodsESP_Folder", "PlayersESP_Folder", "ESP_2D_ScreenGui"}) do
+    local old = CoreGui:FindFirstChild(name)
+    if old then old:Destroy() end
 end
 
-createCategoryHeader(tabs.Home, "Server")
-local homeServerCard = createCardGroup(tabs.Home)
-createButtonRow(homeServerCard, "Server Hop", "HOP", "New public server", ServerHop, true)
-createButtonRow(homeServerCard, "Rejoin", "REJOIN", "Rejoin current", RejoinServer, true)
+local GodsFolder = Instance.new("Folder")
+GodsFolder.Name = "GodsESP_Folder"
+GodsFolder.Parent = CoreGui
 
--- COMBAT TAB --
-createCategoryHeader(tabs.Combat, "Combat Reach")
-local combatCard = createCardGroup(tabs.Combat)
-ctrls.CombatReach = createToggleRow(combatCard, "Combat Reach", "Expand hitboxes", Config.CombatReach,
-    function(v) Config.CombatReach = v if not v then resetHitboxes() end end, true)
-ctrls.CombatAura = createToggleRow(combatCard, "Combat Aura", "Auto attack", Config.CombatAura,
-    function(v) Config.CombatAura = v runStatusRow.SetValue(v and "ACTIVE" or "Ready") end, true)
-ctrls.CombatRange = createSliderRow(combatCard, "Range", "Max reach", 5, 50, Config.CombatRange, false, "",
-    function(v) Config.CombatRange = v end, true)
-ctrls.CombatInterval = createSliderRow(combatCard, "Interval", "Attack speed", 0.1, 1.0, Config.CombatInterval, true, "s",
-    function(v) Config.CombatInterval = v end, true)
-ctrls.CombatIgnoreTribe = createToggleRow(combatCard, "Ignore Tribe", "Skip tribe", Config.CombatIgnoreTribe,
-    function(v) Config.CombatIgnoreTribe = v end, true)
-ctrls.TargetPriority = createDropdownRow(combatCard, "Priority", "Target method", { "Closest", "Lowest HP" },
-    Config.TargetPriority, function(v) Config.TargetPriority = v end, true)
-ctrls.LineOfSight = createToggleRow(combatCard, "Line of Sight", "Visible only", Config.LineOfSight,
-    function(v) Config.LineOfSight = v end, true)
-ctrls.HumanizedPacing = createToggleRow(combatCard, "Humanized", "Natural delays", Config.HumanizedPacing,
-    function(v) Config.HumanizedPacing = v end, true)
-ctrls.MicroBreaks = createToggleRow(combatCard, "Micro Breaks", "Periodic pauses", Config.MicroBreaks,
-    function(v) Config.MicroBreaks = v end, true)
-ctrls.AutoDodge = createToggleRow(combatCard, "Auto Dodge", "Dodge attacks", Config.AutoDodge,
-    function(v) Config.AutoDodge = v end, true)
-ctrls.DodgeThreshold = createSliderRow(combatCard, "Dodge Distance", "Detection", 8, 30, Config.DodgeThreshold, false, "",
-    function(v) Config.DodgeThreshold = v end, true)
+local PlayersFolder = Instance.new("Folder")
+PlayersFolder.Name = "PlayersESP_Folder"
+PlayersFolder.Parent = CoreGui
 
-createCategoryHeader(tabs.Combat, "Bow Aimbot")
-local aimbotCard = createCardGroup(tabs.Combat)
-ctrls.BowAimbot = createToggleRow(aimbotCard, "Bow Aimbot", "Auto aim", Config.BowAimbot,
-    function(v) Config.BowAimbot = v end, true)
-ctrls.AimbotTarget = createDropdownRow(aimbotCard, "Target", "Entity type", { "Players", "Critters", "Both" },
-    Config.AimbotTarget, function(v) Config.AimbotTarget = v end, true)
-ctrls.AimbotPart = createDropdownRow(aimbotCard, "Hitbox", "Body part", { "Head", "Torso" },
-    Config.AimbotPart, function(v) Config.AimbotPart = v end, true)
-ctrls.AimbotRange = createSliderRow(aimbotCard, "Range", "Search range", 30, 400, Config.AimbotRange, false, "",
-    function(v) Config.AimbotRange = v end, true)
-ctrls.AimbotSmoothness = createSliderRow(aimbotCard, "Smoothness", "Snap speed", 0, 9, Config.AimbotSmoothness, false, "",
-    function(v) Config.AimbotSmoothness = v end, true)
-ctrls.AimbotPrediction = createToggleRow(aimbotCard, "Prediction", "Movement predict", Config.AimbotPrediction,
-    function(v) Config.AimbotPrediction = v end, true)
-ctrls.AimbotWallCheck = createToggleRow(aimbotCard, "Wall Check", "Visible only", Config.AimbotWallCheck,
-    function(v) Config.AimbotWallCheck = v end, true)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ESP_2D_ScreenGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 999
+ScreenGui.Parent = CoreGui
 
-createCategoryHeader(tabs.Combat, "Survival")
-local healCard = createCardGroup(tabs.Combat)
-ctrls.AutoHeal = createToggleRow(healCard, "Auto Heal", "Auto consume", Config.AutoHeal,
-    function(v) Config.AutoHeal = v end, true)
-ctrls.HealThreshold = createSliderRow(healCard, "Threshold", "Heal below %", 10, 90, Config.HealThreshold, false, "%",
-    function(v) Config.HealThreshold = v end, true)
-ctrls.HealFood = createDropdownRow(healCard, "Food", "Item",
-    { "Cooked Meat", "Raw Meat", "Berries", "Mushroom", "Apple", "Bloodfruit", "Sunfruit" }, Config.HealFood,
-    function(v) Config.HealFood = v end, true)
-ctrls.ThreatProtection = createToggleRow(healCard, "Threat Retreat", "Run at low HP", Config.ThreatProtection,
-    function(v) Config.ThreatProtection = v end, true)
-ctrls.ThreatRadius = createSliderRow(healCard, "Threat Range", "Detection", 15, 80, Config.ThreatRadius, false, "",
-    function(v) Config.ThreatRadius = v end, true)
-ctrls.RetreatHealth = createSliderRow(healCard, "Retreat HP", "Retreat below", 10, 60, Config.RetreatHealth, false, "%",
-    function(v) Config.RetreatHealth = v end, true)
+local GodESPData = {}
+local PlayerESPData = {}
+local CachedPlayers = {} -- cache de players (sem alocar array por frame)
 
--- GATHER TAB --
-createCategoryHeader(tabs.Gather, "Auto Pickup")
-local gatherPickupCard = createCardGroup(tabs.Gather)
-ctrls.AutoPickup = createToggleRow(gatherPickupCard, "Auto Pickup", "Collect items", Config.AutoPickup,
-    function(v) Config.AutoPickup = v end, true)
-ctrls.PickupRange = createSliderRow(gatherPickupCard, "Range", "Search", 5, 80, Config.PickupRange, false, "",
-    function(v) Config.PickupRange = v end, true)
-ctrls.PickupInterval = createSliderRow(gatherPickupCard, "Interval", "Cycle time", 0.05, 0.6, Config.PickupInterval, true, "s",
-    function(v) Config.PickupInterval = v end, true)
-ctrls.PickupFilter = createDropdownRow(gatherPickupCard, "Filter", "Category",
-    { "All", "Wood", "Stone", "Ore", "Food", "Weapon", "Valuables" }, Config.PickupFilter,
-    function(v) Config.PickupFilter = v end, true)
-ctrls.AutoDropTrash = createToggleRow(gatherPickupCard, "Drop Trash", "Drop junk", Config.AutoDropTrash,
-    function(v) Config.AutoDropTrash = v end, true)
-ctrls.RareItemAlert = createToggleRow(gatherPickupCard, "Rare Alert", "Alert on rare", Config.RareItemAlert,
-    function(v) Config.RareItemAlert = v end, true)
+--============================--
+-- Raycast (params REUTILIZÁVEIS — sem criar instância por chamada)
+--============================--
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+RayParams.IgnoreWater = true
 
-createCategoryHeader(tabs.Gather, "Auras")
-local auraCard = createCardGroup(tabs.Gather)
-ctrls.ResourceAura = createToggleRow(auraCard, "Resource Aura", "Auto harvest", Config.ResourceAura,
-    function(v) Config.ResourceAura = v end, true)
-ctrls.ResourceFilter = createDropdownRow(auraCard, "Resource", "Type",
-    { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.ResourceFilter,
-    function(v) Config.ResourceFilter = v end, true)
-ctrls.ResourceRange = createSliderRow(auraCard, "Range", "Reach", 5, 40, Config.ResourceRange, false, "",
-    function(v) Config.ResourceRange = v end, true)
-ctrls.ResourceInterval = createSliderRow(auraCard, "Interval", "Speed", 0.1, 0.8, Config.ResourceInterval, true, "s",
-    function(v) Config.ResourceInterval = v end, true)
-ctrls.CritterAura = createToggleRow(auraCard, "Critter Aura", "Auto attack", Config.CritterAura,
-    function(v) Config.CritterAura = v end, true)
-ctrls.CritterRange = createSliderRow(auraCard, "Critter Range", "Reach", 5, 40, Config.CritterRange, false, "",
-    function(v) Config.CritterRange = v end, true)
-ctrls.CritterInterval = createSliderRow(auraCard, "Critter Speed", "Interval", 0.1, 0.8, Config.CritterInterval, true, "s",
-    function(v) Config.CritterInterval = v end, true)
+local function IsVisible(part, origin, ignoreModel)
+    local dir = part.Position - origin
+    if dir.Magnitude < 0.1 then return true end
 
--- FARM TAB --
-createCategoryHeader(tabs.Farm, "Auto Farm")
-local farmCard = createCardGroup(tabs.Farm)
-ctrls.AutoFarm = createToggleRow(farmCard, "Auto Farm", "Auto harvest", Config.AutoFarm,
-    function(v) Config.AutoFarm = v end, true)
-ctrls.FarmType = createDropdownRow(farmCard, "Target", "Type", { "Resource", "Critter", "Both" }, Config.FarmType,
-    function(v) Config.FarmType = v end, true)
-ctrls.FarmFilter = createDropdownRow(farmCard, "Resource", "Category",
-    { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.FarmFilter,
-    function(v) Config.FarmFilter = v end, true)
-ctrls.FarmRange = createSliderRow(farmCard, "Range", "Search", 15, 150, Config.FarmRange, false, "",
-    function(v) Config.FarmRange = v end, true)
-ctrls.FarmMovement = createDropdownRow(farmCard, "Movement", "Style", { "Walk", "Glide" }, Config.FarmMovement,
-    function(v) Config.FarmMovement = v end, true)
-ctrls.FarmSpeed = createSliderRow(farmCard, "Speed", "Movement", 16, 80, Config.FarmSpeed or 36, false, "",
-    function(v) Config.FarmSpeed = v end, true)
-ctrls.AutoEquipTool = createToggleRow(farmCard, "Auto Equip", "Best tool", Config.AutoEquipTool,
-    function(v) Config.AutoEquipTool = v end, true)
-ctrls.FilterUnreachable = createToggleRow(farmCard, "Filter", "Skip unreachable", Config.FilterUnreachable,
-    function(v) Config.FilterUnreachable = v end, true)
-ctrls.StuckTimeout = createSliderRow(farmCard, "Stuck Time", "Retarget", 3, 15, Config.StuckTimeout, false, "s",
-    function(v) Config.StuckTimeout = v end, true)
-ctrls.DeathRecovery = createToggleRow(farmCard, "Recovery", "After respawn", Config.DeathRecovery,
-    function(v) Config.DeathRecovery = v end, true)
-ctrls.SmartPathfinding = createToggleRow(farmCard, "Pathfinding", "Smart nav", Config.SmartPathfinding,
-    function(v) Config.SmartPathfinding = v end, true)
-
-createCategoryHeader(tabs.Farm, "Deployables")
-local deployCard = createCardGroup(tabs.Farm)
-ctrls.AutoChest = createToggleRow(deployCard, "Auto Chests", "Loot chests", Config.AutoChest,
-    function(v) Config.AutoChest = v end, true)
-ctrls.ChestRange = createSliderRow(deployCard, "Chest Range", "Search", 5, 50, Config.ChestRange, false, "",
-    function(v) Config.ChestRange = v end, true)
-ctrls.AutoPlant = createToggleRow(deployCard, "Auto Plant", "Plant & harvest", Config.AutoPlant,
-    function(v) Config.AutoPlant = v end, true)
-ctrls.PlantRange = createSliderRow(deployCard, "Plant Range", "Search", 10, 60, Config.PlantRange, false, "",
-    function(v) Config.PlantRange = v end, true)
-ctrls.AutoCraft = createToggleRow(deployCard, "Auto Craft", "Craft recipe", Config.AutoCraft,
-    function(v) Config.AutoCraft = v end, true)
-ctrls.CraftRecipe = createSearchDropdownRow(deployCard, "Recipe", "Search", allCraftableRecipes, Config.CraftRecipe,
-    function(v) Config.CraftRecipe = v end, true)
-ctrls.AutoProcess = createToggleRow(deployCard, "Auto Cook", "Furnaces", Config.AutoProcess,
-    function(v) Config.AutoProcess = v end, true)
-ctrls.AutoClaimDaily = createToggleRow(deployCard, "Daily", "Claim rewards", Config.AutoClaimDaily,
-    function(v) Config.AutoClaimDaily = v end, true)
-
--- ESP TAB --
-createCategoryHeader(tabs.ESP, "Visual ESP")
-local espCard = createCardGroup(tabs.ESP)
-ctrls.ESPPlayers = createToggleRow(espCard, "Players", "Show players", Config.ESPPlayers,
-    function(v) Config.ESPPlayers = v if not v then clearESPCategory("player_") end end, true)
-ctrls.ESPCritters = createToggleRow(espCard, "Critters", "Show critters", Config.ESPCritters,
-    function(v) Config.ESPCritters = v if not v then clearESPCategory("critter_") end end, true)
-ctrls.ESPResources = createToggleRow(espCard, "Resources", "Show nodes", Config.ESPResources,
-    function(v) Config.ESPResources = v if not v then clearESPCategory("res_") end end, true)
-ctrls.ESPItems = createToggleRow(espCard, "Items", "Show drops", Config.ESPItems,
-    function(v) Config.ESPItems = v if not v then clearESPCategory("item_") end end, true)
-ctrls.ESPChests = createToggleRow(espCard, "Chests", "Show chests", Config.ESPChests,
-    function(v) Config.ESPChests = v if not v then clearESPCategory("chest_") end end, true)
-ctrls.ESPTraders = createToggleRow(espCard, "Traders", "Show traders", Config.ESPTraders,
-    function(v) Config.ESPTraders = v if not v then clearESPCategory("trader_") end end, true)
-ctrls.ESPMeteors = createToggleRow(espCard, "Meteors", "Rare items", Config.ESPMeteors,
-    function(v) Config.ESPMeteors = v if not v then clearESPCategory("meteor_") end end, true)
-ctrls.ESPDistance = createSliderRow(espCard, "Distance", "Max range", 50, 600, Config.ESPDistance, false, "",
-    function(v) Config.ESPDistance = v
-        if espFolder then
-            for _, bb in ipairs(espFolder:GetChildren()) do if bb:IsA("BillboardGui") then bb.MaxDistance = v end end
-        end
-    end, true)
-ctrls.ESPTracers = createToggleRow(espCard, "Tracers", "Lines", Config.ESPTracers,
-    function(v) Config.ESPTracers = v end, true)
-ctrls.ESPBoxes = createToggleRow(espCard, "Boxes", "Bounding", Config.ESPBoxes,
-    function(v) Config.ESPBoxes = v end, true)
-ctrls.ESPHealthBars = createToggleRow(espCard, "Health", "HP bars", Config.ESPHealthBars,
-    function(v) Config.ESPHealthBars = v end, true)
-ctrls.ESPNames = createToggleRow(espCard, "Names", "Show names", Config.ESPNames,
-    function(v) Config.ESPNames = v end, true)
-ctrls.ESPDistanceText = createToggleRow(espCard, "Distance", "Show dist", Config.ESPDistanceText,
-    function(v) Config.ESPDistanceText = v end, true)
-
--- MISC TAB --
-createCategoryHeader(tabs.Misc, "Movement")
-local miscMoveCard = createCardGroup(tabs.Misc)
-ctrls.SpeedEnabled = createToggleRow(miscMoveCard, "Speed", "Walk speed", Config.SpeedEnabled,
-    function(v) Config.SpeedEnabled = v end, true)
-ctrls.SpeedValue = createSliderRow(miscMoveCard, "Speed Value", "Walk", 16, 60, Config.SpeedValue, false, "",
-    function(v) Config.SpeedValue = v end, true)
-ctrls.JumpEnabled = createToggleRow(miscMoveCard, "Jump", "Jump power", Config.JumpEnabled,
-    function(v) Config.JumpEnabled = v end, true)
-ctrls.JumpValue = createSliderRow(miscMoveCard, "Jump Value", "Power", 50, 83, Config.JumpValue, false, "",
-    function(v) Config.JumpValue = math.clamp(v, 50, 83) end, true)
-ctrls.InfiniteJump = createToggleRow(miscMoveCard, "Infinite Jump", "Mid-air", Config.InfiniteJump,
-    function(v) Config.InfiniteJump = v end, true)
-ctrls.Noclip = createToggleRow(miscMoveCard, "Noclip", "Through walls", Config.Noclip,
-    function(v) Config.Noclip = v end, true)
-
-createCategoryHeader(tabs.Misc, "Environment")
-local miscEnvCard = createCardGroup(tabs.Misc)
-ctrls.AntiAFK = createToggleRow(miscEnvCard, "Anti-AFK", "No disconnect", Config.AntiAFK,
-    function(v) Config.AntiAFK = v end, true)
-ctrls.Fullbright = createToggleRow(miscEnvCard, "Fullbright", "No darkness", Config.Fullbright,
-    function(v) Config.Fullbright = v
-        if not v then Lighting.Ambient = origLighting.Ambient Lighting.OutdoorAmbient = origLighting.OutdoorAmbient Lighting.Brightness = origLighting.Brightness end
-    end, true)
-ctrls.NoFog = createToggleRow(miscEnvCard, "No Fog", "Clear fog", Config.NoFog,
-    function(v) Config.NoFog = v
-        if not v then Lighting.FogEnd = origLighting.FogEnd if atmosphere then atmosphere.Density = origAtmosphereDensity end end
-    end, true)
-ctrls.DisableParticles = createToggleRow(miscEnvCard, "No Particles", "FPS boost", Config.DisableParticles,
-    function(v) Config.DisableParticles = v end, true)
-ctrls.BoatCruise = createToggleRow(miscEnvCard, "Boat Cruise", "Auto boat", Config.BoatCruise,
-    function(v) Config.BoatCruise = v end, true)
-ctrls.BoatSpeed = createSliderRow(miscEnvCard, "Boat Speed", "Cruise", 20, 120, Config.BoatSpeed or 45, false, "",
-    function(v) Config.BoatSpeed = v end, true)
-ctrls.ChatMessages = createToggleRow(miscEnvCard, "Auto Chat", "Messages", Config.ChatMessages,
-    function(v) Config.ChatMessages = v end, true)
-ctrls.ChatInterval = createSliderRow(miscEnvCard, "Chat Time", "Interval", 10, 120, Config.ChatInterval, false, "s",
-    function(v) Config.ChatInterval = v end, true)
-ctrls.AutoFishing = createToggleRow(miscEnvCard, "Auto Fish", "Auto fish", Config.AutoFishing,
-    function(v) Config.AutoFishing = v end, true)
-ctrls.KillCounter = createToggleRow(miscEnvCard, "Kills", "Show counter", Config.KillCounter,
-    function(v) Config.KillCounter = v end, true)
-
--- STATS TAB --
-createCategoryHeader(tabs.Stats, "Session")
-local statsCard = createCardGroup(tabs.Stats)
-local statsKills = createInfoRow(statsCard, "Kills", tostring(SessionStats.Kills), false)
-local statsResources = createInfoRow(statsCard, "Resources", tostring(SessionStats.ResourcesGathered), false)
-local statsItems = createInfoRow(statsCard, "Items", tostring(SessionStats.ItemsPickedUp), false)
-local statsChests = createInfoRow(statsCard, "Chests", tostring(SessionStats.ChestsOpened), false)
-local statsDistance = createInfoRow(statsCard, "Distance", string.format("%.1f", SessionStats.DistanceWalked), false)
-local statsTime = createInfoRow(statsCard, "Time", "00:00:00", false)
-
-task.spawn(function()
-    local lastUpdate = tick()
-    while mainFrame.Parent do
-        local now = tick()
-        if now - lastUpdate >= 1 then
-            lastUpdate = now
-            SessionStats.SessionTime = now - SessionStats.StartTime
-            local h = math.floor(SessionStats.SessionTime / 3600)
-            local m = math.floor((SessionStats.SessionTime % 3600) / 60)
-            local s = math.floor(SessionStats.SessionTime % 60)
-            statsTime.SetValue(string.format("%02d:%02d:%02d", h, m, s))
-            statsKills.SetValue(tostring(SessionStats.Kills))
-            statsResources.SetValue(tostring(SessionStats.ResourcesGathered))
-            statsItems.SetValue(tostring(SessionStats.ItemsPickedUp))
-            statsChests.SetValue(tostring(SessionStats.ChestsOpened))
-            statsDistance.SetValue(string.format("%.1f", SessionStats.DistanceWalked))
-        end
-        task.wait(0.5)
-    end
-end)
-
--- WAYPOINTS TAB --
-createCategoryHeader(tabs.Waypoints, "Saved")
-local waypointCard = createCardGroup(tabs.Waypoints)
-
-local function SaveWaypoint(name)
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        Config.Waypoints[name] = { Position = root.Position, CFrame = root.CFrame }
-        AutoSaveConfig()
-        SendNotification("Identical", "Saved " .. name, 2, "📍")
-    end
-end
-
-local function TeleportToWaypoint(name)
-    if Config.Waypoints[name] then
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.CFrame = Config.Waypoints[name].CFrame
-            SendNotification("Identical", "Teleported!", 2, "🚀")
-        end
-    end
-end
-
-createButtonRow(waypointCard, "Save Here", "SAVE", "Save position", function()
-    SaveWaypoint("WP_" .. os.time())
-end, true)
-
-createButtonRow(waypointCard, "Spawn", "SPAWN", "Go to spawn", function()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if root then
-        local spawnPoint = Workspace:FindFirstChild("SpawnPoint") or Workspace:FindFirstChild("Spawn")
-        if spawnPoint then
-            root.CFrame = spawnPoint.CFrame
-            SendNotification("Identical", "At spawn!", 2, "🏠")
-        else
-            SendNotification("Identical", "No spawn!", 2, "❌")
-        end
-    end
-end, true)
-
-SyncUIWithConfig = function()
-    for key, c in pairs(ctrls) do
-        if Config[key] ~= nil then
-            if c.SetState then c.SetState(Config[key])
-            elseif c.SetValue then c.SetValue(Config[key])
-            elseif c.SetSelected then c.SetSelected(Config[key]) end
-        end
-    end
-end
-
-switchTab("Home")
-
-searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    local q = searchBox.Text:lower():gsub("^%s*(.-)%s*$", "%1")
-    for _, item in ipairs(rowSearchIndex) do
-        local row = item.frame
-        if q == "" or item.query:find(q, 1, true) then row.Visible = true else row.Visible = false end
-    end
-end)
-
-ToggleUIMinimize = function()
-    Config.UIMinimized = not Config.UIMinimized
-    bodyFrame.Visible = not Config.UIMinimized
-    mainFrame.Size = Config.UIMinimized and UDim2.new(0, 580, 0, 52) or UDim2.new(0, 580, 0, 420)
-    minBtn.Text = Config.UIMinimized and "+" or "—"
-end
-
-ToggleUIVisibility = function()
-    Config.UIVisible = not Config.UIVisible
-    mainFrame.Visible = Config.UIVisible
-    fab.Visible = not Config.UIVisible
-end
-
-fab.Activated:Connect(function() ToggleUIVisibility() end)
-
-table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input, gpe)
-    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl
-        or input.KeyCode == Config.UIKeybind or (typeof(Config.UIKeybind) == "string" and input.KeyCode.Name == Config.UIKeybind) then
-        ToggleUIVisibility(); return
-    end
-    if input.KeyCode == Config.StopKeybind or (typeof(Config.StopKeybind) == "string" and input.KeyCode.Name == Config.StopKeybind)
-        or input.KeyCode == Enum.KeyCode.End then
-        EmergencyStop(); return
-    end
-    if gpe then return end
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root and (Config.CombatReach or Config.CombatAura) then
-            local playersFolder = CachedRefs.PlayersFolder
-            if playersFolder then
-                local hitList = {}
-                for _, pChar in ipairs(playersFolder:GetChildren()) do
-                    if pChar ~= char then
-                        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-                        local pHum = pChar:FindFirstChildOfClass("Humanoid")
-                        if pRoot and pHum and pHum.Health > 0 then
-                            local dist = (root.Position - pRoot.Position).Magnitude
-                            if dist <= Config.CombatRange then table.insert(hitList, pRoot) end
-                        end
-                    end
-                end
-                if #hitList > 0 then
-                    local primary = hitList[1]
-                    local lookDir = (primary.Position - root.Position).Unit
-                    if RemoteSwingTool then RemoteSwingTool:FireServer(lookDir, hitList) end
-                end
-            end
-        end
-    end
-end))
-
-local function getRootPart(inst)
-    if not inst or not inst:IsA("Model") then return nil end
-    return inst.PrimaryPart or inst:FindFirstChild("HumanoidRootPart") or inst:FindFirstChild("Torso")
-        or inst:FindFirstChild("UpperTorso") or inst:FindFirstChild("Head") or inst:FindFirstChildWhichIsA("BasePart")
-end
-
-local function hasLineOfSight(fromPos, toPos, ignoreList)
-    if not Config.LineOfSight and not Config.AimbotWallCheck then return true end
-    local params = RaycastParams.new()
-    params.FilterType = Enum.RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = ignoreList or { LocalPlayer.Character }
-    local result = Workspace:Raycast(fromPos, (toPos - fromPos), params)
-    return result == nil or result.Instance:IsDescendantOf(ignoreList[1])
-end
-
-local trackedVelocities = {}
-local lastVelocityUpdate = 0
-local function updateVelocityTracker(dt)
-    local now = tick()
-    if now - lastVelocityUpdate < 0.1 then return end
-    lastVelocityUpdate = now
-    if not dt or dt <= 0 then return end
-    local critters = CachedRefs.CrittersFolder
-    if critters then
-        for _, c in ipairs(critters:GetChildren()) do
-            local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("Torso") or
-                c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Head") or getRootPart(c)
-            if p then
-                local curPos = p.Position
-                local rec = trackedVelocities[p]
-                if rec then
-                    local instVel = (curPos - rec.pos) / dt
-                    rec.vel = rec.vel:Lerp(instVel, 0.45)
-                    rec.pos = curPos
-                else
-                    trackedVelocities[p] = { pos = curPos, vel = p.AssemblyLinearVelocity or Vector3.zero }
-                end
-            end
-        end
-    end
-    local players = CachedRefs.PlayersFolder
-    if players then
-        for _, pChar in ipairs(players:GetChildren()) do
-            local p = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Head")
-            if p then
-                local curPos = p.Position
-                local rec = trackedVelocities[p]
-                if rec then
-                    local instVel = (curPos - rec.pos) / dt
-                    rec.vel = rec.vel:Lerp(instVel, 0.45)
-                    rec.pos = curPos
-                else
-                    trackedVelocities[p] = { pos = curPos, vel = p.AssemblyLinearVelocity or Vector3.zero }
-                end
-            end
-        end
-    end
-end
-
-local function isBowEquipped()
-    local char = LocalPlayer.Character
-    local tools = char and char:FindFirstChild("Tools")
-    if tools then
-        for _, t in ipairs(tools:GetChildren()) do
-            local n = t.Name:lower()
-            if n:find("bow") or n:find("crossbow") or n:find("sling") then return true end
-        end
-    end
-    return false
-end
-
-local function getEquippedWeaponSpeed()
-    local char = LocalPlayer.Character
-    local tools = char and char:FindFirstChild("Tools")
-    if tools then
-        for _, t in ipairs(tools:GetChildren()) do
-            local n = t.Name:lower()
-            if n:find("iron bow") then return 450
-            elseif n:find("crossbow") and n:find("magnetite") then return 650
-            elseif n:find("crossbow") then return 500
-            elseif n:find("god sling") or n:find("sling") then return 270
-            elseif n:find("bow") then return 350 end
-        end
-    end
-    return 350
-end
-
-local function computeAimPoint(targetPart, isCritter)
-    local char = LocalPlayer.Character
-    local launchOrigin = char and (char:GetPivot() * CFrame.new(1.4, -0.4, -3)).Position or
-        (Camera and Camera.CFrame.Position or Vector3.zero)
-    local targetPos = targetPart.Position
-    if not isCritter and targetPart.Name == "Head" then
-        targetPos = targetPart.Position
-    elseif not isCritter then
-        targetPos = targetPart.Position + Vector3.new(0, 1.4, 0)
+    local myChar = LocalPlayer.Character
+    if ignoreModel and myChar then
+        RayParams.FilterDescendantsInstances = {myChar, ignoreModel}
+    elseif ignoreModel then
+        RayParams.FilterDescendantsInstances = {ignoreModel}
+    elseif myChar then
+        RayParams.FilterDescendantsInstances = {myChar}
     else
-        targetPos = targetPart.Position + Vector3.new(0, math.min(targetPart.Size.Y * 0.2, 0.4), 0)
+        RayParams.FilterDescendantsInstances = {}
     end
-    local speed = getEquippedWeaponSpeed()
-    local diff = targetPos - launchOrigin
-    local dist = diff.Magnitude
-    local flightTime = dist / speed
-    local targetVel = Vector3.zero
-    if Config.AimbotPrediction then
-        local rec = trackedVelocities[targetPart] or
-            (targetPart.Parent and (trackedVelocities[targetPart.Parent:FindFirstChild("HumanoidRootPart")] or trackedVelocities[targetPart.Parent:FindFirstChild("ENTITY_HITBOX")]))
-        if rec and rec.vel and rec.vel.Magnitude > 0.3 then targetVel = rec.vel
-        elseif targetPart.AssemblyLinearVelocity and targetPart.AssemblyLinearVelocity.Magnitude > 0.3 then targetVel = targetPart.AssemblyLinearVelocity end
-    end
-    local predictedTargetPos = targetPos + (targetVel * flightTime)
-    local delta = predictedTargetPos - launchOrigin
-    local g = 122.2
-    local vLaunch = (delta + Vector3.new(0, 0.5 * g * (flightTime ^ 2), 0)) / flightTime
-    return launchOrigin + (vLaunch.Unit * 1000)
+
+    local result = Workspace:Raycast(origin, dir, RayParams)
+    if not result then return true end
+    local hit = result.Instance
+    return hit == part or hit:IsDescendantOf(part)
 end
 
-local function getAimbotTarget()
-    local nearestPart = nil
-    local nearestAimPoint = nil
-    local nearestScreenDist = math.huge
-    local mousePos = UserInputService:GetMouseLocation()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    local maxWorldRange = Config.AimbotRange or 300
+--============================--
+-- Detecção de deuses
+--============================--
+local function IsGodName(rawName)
+    local lower = string.lower(rawName)
+    -- early-out: 99,9% dos objetos nem têm "god" no nome (1 único find)
+    if not string.find(lower, "god", 1, true) then return false end
 
-    if Config.AimbotTarget == "Players" or Config.AimbotTarget == "Both" then
-        local playersFolder = CachedRefs.PlayersFolder
-        if playersFolder then
-            for _, pChar in ipairs(playersFolder:GetChildren()) do
-                if pChar ~= char then
-                    local targetPart = (Config.AimbotPart == "Head" and pChar:FindFirstChild("Head")) or
-                        pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("UpperTorso")
-                    local pHum = pChar:FindFirstChildOfClass("Humanoid")
-                    if targetPart and pHum and pHum.Health > 0 then
-                        local worldDist = root and (root.Position - targetPart.Position).Magnitude or 0
-                        if worldDist <= maxWorldRange then
-                            if hasLineOfSight(root.Position, targetPart.Position, { char, pChar }) then
-                                local aimPoint = computeAimPoint(targetPart, false)
-                                local screenPos, onScreen = Camera:WorldToViewportPoint(aimPoint)
-                                if onScreen then
-                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                                    if screenDist < nearestScreenDist then
-                                        nearestScreenDist = screenDist
-                                        nearestPart = targetPart
-                                        nearestAimPoint = aimPoint
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    local clean = string.gsub(lower, "[%s_%%-]", "")
+    for i = 1, #CLEAN_GODS do
+        if string.find(clean, CLEAN_GODS[i], 1, true) then return true end
     end
-
-    if not nearestPart and (Config.AimbotTarget == "Critters" or Config.AimbotTarget == "Both") then
-        local crittersFolder = CachedRefs.CrittersFolder
-        if crittersFolder then
-            for _, critter in ipairs(crittersFolder:GetChildren()) do
-                local part = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("Torso") or
-                    critter:FindFirstChild("Head") or getRootPart(critter)
-                if part then
-                    local worldDist = root and (root.Position - part.Position).Magnitude or 0
-                    if worldDist <= maxWorldRange then
-                        local aimPoint = computeAimPoint(part, true)
-                        local screenPos, onScreen = Camera:WorldToViewportPoint(aimPoint)
-                        if onScreen then
-                            local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
-                            if screenDist < nearestScreenDist then
-                                nearestScreenDist = screenDist
-                                nearestPart = part
-                                nearestAimPoint = aimPoint
-                            end
-                        end
-                    end
-                end
-            end
-        end
+    for i = 1, #FALSE_POSITIVES do
+        if string.find(clean, FALSE_POSITIVES[i], 1, true) then return false end
     end
-    return nearestPart, nearestAimPoint
-end
-
-table.insert(activeConnections, RunService.RenderStepped:Connect(function()
-    if Config.BowAimbot and Camera and isBowEquipped() then
-        local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or
-            UserInputService:IsMouseButtonPressed(Enum.UserInputType.Touch)
-        if isRightClicking then
-            local targetPart, aimPoint = getAimbotTarget()
-            if targetPart and aimPoint then
-                local targetCF = CFrame.lookAt(Camera.CFrame.Position, aimPoint)
-                if Config.AimbotSmoothness and Config.AimbotSmoothness > 0 then
-                    local alpha = math.clamp(1 - (Config.AimbotSmoothness / 10), 0.08, 1)
-                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
-                else
-                    Camera.CFrame = targetCF
-                end
-            end
-        end
-    end
-end))
-
-local function getOrCreateESP(key, adornee, text, color)
-    if not adornee or not adornee.Parent then
-        if espStorage[key] then pcall(function() espStorage[key]:Destroy() end) espStorage[key] = nil end
-        return nil
-    end
-    local bb = espStorage[key]
-    if not bb or not bb.Parent then
-        bb = Instance.new("BillboardGui")
-        bb.Name = key
-        bb.Size = UDim2.new(0, 120, 0, 24)
-        bb.StudsOffset = Vector3.new(0, 3, 0)
-        bb.AlwaysOnTop = true
-        bb.MaxDistance = Config.ESPDistance
-        bb.Adornee = adornee
-        bb.Parent = espFolder
-        local lbl = Instance.new("TextLabel")
-        lbl.Name = "Label"
-        lbl.Text = text
-        lbl.Font = Enum.Font.GothamBold
-        lbl.TextSize = 11
-        lbl.TextColor3 = color or Color3.new(1, 1, 1)
-        lbl.TextStrokeTransparency = 0.3
-        lbl.BackgroundTransparency = 1
-        lbl.Size = UDim2.new(1, 0, 1, 0)
-        lbl.Parent = bb
-        espStorage[key] = bb
-    else
-        bb.Adornee = adornee
-        bb.Parent = espFolder
-        bb.MaxDistance = Config.ESPDistance
-        local lbl = bb:FindFirstChild("Label")
-        if lbl then lbl.Text = text if color then lbl.TextColor3 = color end end
-    end
-    return bb
-end
-
-local lastEquipTime = 0
-local function autoEquipBestToolFor(targetCategory)
-    if not Config.AutoEquipTool then return end
-    local now = tick()
-    if now - lastEquipTime < 0.5 then return end
-    lastEquipTime = now
-    pcall(function()
-        local GameUtil = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("GameUtil") and
-            require(RS.Modules.GameUtil)
-        if GameUtil and GameUtil.Data and GameUtil.Data.toolbar and Packets and Packets.EquipTool then
-            for slot = 1, 6 do
-                local item = GameUtil.Data.toolbar[slot]
-                if type(item) == "table" and item.name then
-                    local n = item.name:lower()
-                    local isMatch = false
-                    if targetCategory == "Wood" and (n:find("axe") or n:find("hatchet")) then isMatch = true
-                    elseif (targetCategory == "Stone" or targetCategory == "Ore" or targetCategory == "Crystal") and (n:find("pick") or n:find("hammer")) then isMatch = true
-                    elseif (targetCategory == "Combat" or targetCategory == "Critter") and (n:find("sword") or n:find("blade") or n:find("club") or n:find("spear")) then isMatch = true end
-                    if isMatch then
-                        if GameUtil.Data.equipped ~= slot then Packets.EquipTool.send(slot) end
-                        return
-                    end
-                end
-            end
-        end
-        local bag = LocalPlayer.PlayerGui:FindFirstChild("MainGui") and
-            LocalPlayer.PlayerGui.MainGui:FindFirstChild("Panels") and
-            LocalPlayer.PlayerGui.MainGui.Panels:FindFirstChild("Bag")
-        if RemoteEquipTool and bag then
-            for _, item in ipairs(bag:GetDescendants()) do
-                if item:IsA("TextLabel") and item.Name == "ItemName" then
-                    local n = item.Text:lower()
-                    if targetCategory == "Wood" and n:find("axe") then RemoteEquipTool:FireServer(item.Text) break
-                    elseif (targetCategory == "Stone" or targetCategory == "Ore" or targetCategory == "Crystal") and n:find("pick") then RemoteEquipTool:FireServer(item.Text) break
-                    elseif (targetCategory == "Combat" or targetCategory == "Critter") and (n:find("sword") or n:find("blade") or n:find("hammer") or n:find("club") or n:find("spear")) then RemoteEquipTool:FireServer(item.Text) break end
-                end
-            end
-        end
-    end)
-end
-
-local function strikeTarget(targetPart)
-    if not targetPart or not LocalPlayer.Character then return end
-    local char = LocalPlayer.Character
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-    local eid = tonumber(targetPart:GetAttribute("EntityID") or (targetPart.Parent and targetPart.Parent:GetAttribute("EntityID")))
-    local lookDir = (targetPart.Position - root.Position).Unit
-    local st = Clock and Clock.getServerTime and Clock.getServerTime(true) or os.clock()
-    local swingCFrame = CFrame.new(root.Position, targetPart.Position)
-    pcall(function()
-        local toolMod = RS:FindFirstChild("Game") and RS.Game:FindFirstChild("tool") and require(RS.Game.tool)
-        if toolMod and toolMod.swingTool then toolMod.swingTool() end
-    end)
-    if RemoteSwingTool then pcall(function() RemoteSwingTool:FireServer(lookDir, { targetPart }) end) end
-    if Packets and Packets.SwingTool and eid then
-        pcall(function()
-            Packets.SwingTool.send({ entityIDs = { { entityID = eid } }, cframe = swingCFrame, timestamp = st })
-        end)
-    end
-    SessionStats.ResourcesGathered = SessionStats.ResourcesGathered + 1
-end
-
-local function pickupItem(item)
-    if not item then return end
-    local eid = tonumber(item:GetAttribute("EntityID") or (item.Parent and item.Parent:GetAttribute("EntityID")))
-    if eid then
-        if RemotePickup then pcall(function() RemotePickup:FireServer(eid) end) end
-        if Packets and Packets.Pickup then pcall(function() Packets.Pickup.send(eid) end) end
-    else
-        if RemotePickup then pcall(function() RemotePickup:FireServer(item) end) end
-    end
-    SessionStats.ItemsPickedUp = SessionStats.ItemsPickedUp + 1
-end
-
-local function isResourceAccessible(rootPos, targetPos, targetObj)
-    if not Config.FilterUnreachable then return true end
-    local yDiff = math.abs(targetPos.Y - rootPos.Y)
-    if yDiff > 14 then return false end
-    if targetPos.Y < -15 and rootPos.Y > -10 then return false end
-    local rayParams = RaycastParams.new()
-    rayParams.FilterType = Enum.RaycastFilterType.Exclude
-    rayParams.FilterDescendantsInstances = { LocalPlayer.Character, targetObj }
-    local ray = Workspace:Raycast(rootPos, (targetPos - rootPos), rayParams)
-    if ray and ray.Instance and ray.Instance:IsA("Terrain") and ray.Material ~= Enum.Material.Water then return false end
     return true
 end
 
-local function forEachResource(callback)
-    local resFolder = CachedRefs.ResourcesFolder
-    if resFolder then for _, obj in ipairs(resFolder:GetChildren()) do callback(obj) end end
-    for _, obj in ipairs(Workspace:GetChildren()) do
-        if obj ~= resFolder and obj.Name ~= "Terrain" and obj.Name ~= "Players" and obj.Name ~= "Critters" and obj.Name ~= "Items" and obj.Name ~= "Deployables" and obj.Name ~= "Boats" and obj.Name ~= "Camera" then callback(obj) end
+local function ResolveGodRoot(god)
+    if god:IsA("BasePart") then return god end
+    local pp = god.PrimaryPart
+    if pp and pp.Parent then return pp end
+    for _, c in ipairs(god:GetChildren()) do
+        if c:IsA("BasePart") then return c end
+    end
+    for _, d in ipairs(god:GetDescendants()) do
+        if d:IsA("BasePart") then return d end
+    end
+    return nil
+end
+
+local function ComputeGodOffset(god)
+    -- chamado UMA vez por deus (na criação), nunca por frame
+    local ok, size = pcall(function()
+        if god:IsA("Model") then
+            return select(2, god:GetBoundingBox())
+        elseif god:IsA("BasePart") then
+            return god.Size
+        end
+        return Vector3.zero
+    end)
+    if ok and size and size.Y > 0 then
+        return Vector3.new(0, size.Y * 0.5 + 3, 0)
+    end
+    return Vector3.new(0, 6, 0)
+end
+
+--============================--
+-- ESP DE DEUSES
+--============================--
+local function CreateGodVisuals(god)
+    if GodESPData[god] then return end
+
+    local folder = Instance.new("Folder")
+    folder.Name = "GodVisuals_" .. god.Name
+
+    local highlight = Instance.new("Highlight")
+    highlight.FillColor = Settings.GodColor
+    highlight.FillTransparency = 0.45
+    highlight.OutlineColor = Settings.GodColor
+    highlight.OutlineTransparency = 0
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Adornee = god
+    highlight.Enabled = false
+    highlight.Parent = folder
+
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.fromOffset(280, 34)
+    billboard.StudsOffset = ComputeGodOffset(god)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.MaxDistance = Settings.GodMaxDist
+    billboard.Enabled = false
+    billboard.Parent = folder
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.fromScale(1, 1)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Settings.GodColor
+    label.TextStrokeTransparency = 0.25
+    label.Font = Enum.Font.GothamBold
+    label.TextScaled = true
+    label.Text = ""
+    label.Parent = billboard
+
+    folder.Parent = GodsFolder
+
+    GodESPData[god] = {
+        god = god,
+        folder = folder,
+        highlight = highlight,
+        billboard = billboard,
+        label = label,
+        root = nil,
+        lastRoot = nil,
+        rootRetryAt = 0,
+        lastText = nil,
+        labelColor = nil,
+        rangeOn = false,
+    }
+
+    if Settings.GodDebug then
+        print("[GodESP] Registrado: " .. god.Name .. " (" .. god.ClassName .. ")")
     end
 end
 
-local lastCombatTime = 0; local lastResourceTime = 0; local lastCritterTime = 0; local lastPickupTime = 0
-local lastHealTime = 0; local lastChestTime = 0; local lastDropTime = 0; local lastCraftTime = 0
-local lastPlantTime = 0; local lastProcessTime = 0; local lastFarmMoveTime = 0; local lastFarmSwingTime = 0
-local lastChatTime = 0; local lastFishingTime = 0; local lastPosition = nil
-local farmTarget = nil; local farmApproachPos = nil; local farmTargetAcquiredTime = 0; local lastJumpState = false
-
-table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
-    updateVelocityTracker(dt)
-    local now = tick()
-    local char = LocalPlayer.Character
-    local hum = char and char:FindFirstChildOfClass("Humanoid")
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-    if root and lastPosition then
-        local distance = (root.Position - lastPosition).Magnitude
-        if distance < 100 then SessionStats.DistanceWalked = SessionStats.DistanceWalked + distance end
+local function UpdateGodVisuals(god, data, cam, now)
+    if not god.Parent then
+        if data.folder then pcall(function() data.folder:Destroy() end) end
+        GodESPData[god] = nil
+        return
     end
-    if root then lastPosition = root.Position end
 
-    if hum then
-        if Config.AutoFarm then
-            local fSpeed = Config.FarmSpeed or 36
-            if hum.WalkSpeed ~= fSpeed then hum.WalkSpeed = fSpeed end
-        elseif Config.SpeedEnabled then
-            local targetSpeed = math.clamp(Config.SpeedValue, 16, 60)
-            if hum.WalkSpeed ~= targetSpeed then hum.WalkSpeed = targetSpeed end
-        else
-            if hum.WalkSpeed ~= 16 then hum.WalkSpeed = 16 end
+    -- raiz em CACHE: só re-resolve (GetDescendants) 1x/segundo se invalidar
+    local root = data.root
+    if not root or not root.Parent then
+        root = nil
+        if (now - data.rootRetryAt) >= 1 then
+            data.rootRetryAt = now
+            root = ResolveGodRoot(god)
+            data.root = root
         end
-        if Config.JumpEnabled then
-            local targetJump = math.clamp(Config.JumpValue, 50, 83)
-            if hum.JumpPower ~= targetJump then hum.JumpPower = targetJump end
-        else
-            if hum.JumpPower ~= 50 then hum.JumpPower = 50 end
+        if not root then
+            data.highlight.Enabled = false
+            data.billboard.Enabled = false
+            return
         end
     end
 
-    if Config.Noclip and char then
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
+    local dist = (root.Position - cam.CFrame.Position).Magnitude
+    if dist > Settings.GodMaxDist then
+        if data.rangeOn then
+            data.rangeOn = false
+            data.highlight.Enabled = false
+            data.billboard.Enabled = false
         end
+        return
+    end
+    data.rangeOn = true
+
+    local visible = true
+    if Settings.GodVisCheck then
+        visible = IsVisible(root, cam.CFrame.Position, god)
     end
 
-    if Config.InfiniteJump and hum then
-        local jumping = UserInputService:IsKeyDown(Enum.KeyCode.Space)
-        if jumping and not lastJumpState then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
-        lastJumpState = jumping
+    data.highlight.Enabled = Settings.GodHighlight and visible
+    data.highlight.FillColor = Settings.GodColor
+    data.highlight.OutlineColor = Settings.GodColor
+
+    if data.lastRoot ~= root then
+        data.lastRoot = root
+        data.billboard.Adornee = root -- billboard segue o deus sozinho depois disso
     end
 
-    if Config.BoatCruise and hum then
-        local seat = hum.SeatPart
-        if seat then
-            local speed = Config.BoatSpeed or 45
-            local look = seat.CFrame.LookVector
-            local boat = seat.Parent
-            local boatPart = (boat and (boat.PrimaryPart or boat:FindFirstChild("MainPart") or boat:FindFirstChildWhichIsA("BasePart"))) or seat
-            if seat:IsA("VehicleSeat") then seat.ThrottleFloat = 1 seat.Throttle = 1 seat.MaxSpeed = speed end
-            if boatPart and boatPart:IsA("BasePart") then
-                boatPart.AssemblyLinearVelocity = Vector3.new(look.X * speed, boatPart.AssemblyLinearVelocity.Y, look.Z * speed)
-            end
+    local showText = Settings.GodName or Settings.GodDistance
+    data.billboard.Enabled = showText
+    if showText then
+        local text = ""
+        if Settings.GodName then text = god.Name end
+        if Settings.GodDistance then
+            if text ~= "" then text = text .. "  •  " end
+            text = text .. string.format("%.0fm", dist)
         end
+        if data.lastText ~= text then -- só re-renderiza o texto quando MUDA
+            data.lastText = text
+            data.label.Text = text
+        end
+        if data.labelColor ~= Settings.GodColor then
+            data.labelColor = Settings.GodColor
+            data.label.TextColor3 = Settings.GodColor
+        end
+        data.billboard.MaxDistance = Settings.GodMaxDist
     end
+end
 
-    if Config.CombatReach and root then
-        local playersFolder = CachedRefs.PlayersFolder
-        if playersFolder then
-            for _, pChar in ipairs(playersFolder:GetChildren()) do
-                if pChar ~= char then
-                    local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-                    if pRoot then
-                        if not origHitboxSizes[pRoot] then origHitboxSizes[pRoot] = pRoot.Size end
-                        pRoot.Size = Vector3.new(Config.CombatRange, Config.CombatRange, Config.CombatRange)
-                        pRoot.Transparency = 0.8
-                        pRoot.CanCollide = false
-                    end
+local function TryRegisterGod(inst)
+    if GodESPData[inst] then return end
+    if not (inst:IsA("Model") or inst:IsA("BasePart")) then return end
+    if not IsGodName(inst.Name) then return end
+    if Players:GetPlayerFromCharacter(inst) then return end
+    CreateGodVisuals(inst)
+end
+
+-- Scan EM SEGUNDO PLANO, em pedaços: nunca trava um frame
+local function StartGodScan()
+    task.spawn(function()
+        local ok, err = pcall(function()
+            local stack = {Workspace}
+            local processed = 0
+            while #stack > 0 and Active do
+                if not Settings.GodsESP then break end
+                local inst = table.remove(stack)
+                TryRegisterGod(inst)
+                local children = inst:GetChildren()
+                for i = 1, #children do
+                    stack[#stack + 1] = children[i]
                 end
-            end
-        end
-    end
-
-    local paceVariance = Config.HumanizedPacing and ((math.random(-25, 25)) / 1000) or 0
-
-    if Config.AutoDodge and root and hum then
-        local playersFolder = CachedRefs.PlayersFolder
-        if playersFolder then
-            for _, enemy in ipairs(playersFolder:GetChildren()) do
-                if enemy ~= char then
-                    local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-                    if eRoot then
-                        local dist = (root.Position - eRoot.Position).Magnitude
-                        if dist <= Config.DodgeThreshold then
-                            local enemyVel = eRoot.AssemblyLinearVelocity
-                            local toUs = (root.Position - eRoot.Position).Unit
-                            local dotProduct = enemyVel:Dot(toUs)
-                            if dotProduct > 10 then
-                                local dodgeDir = (root.Position - eRoot.Position).Unit
-                                local perpendicularDir = Vector3.new(-dodgeDir.Z, 0, dodgeDir.X)
-                                hum:MoveTo(root.Position + perpendicularDir * 15)
-                                break
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if Config.ThreatProtection and root and hum and (hum.Health / hum.MaxHealth * 100) < Config.RetreatHealth then
-        local playersFolder = CachedRefs.PlayersFolder
-        if playersFolder then
-            for _, enemy in ipairs(playersFolder:GetChildren()) do
-                if enemy ~= char then
-                    local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-                    if eRoot then
-                        local dist = (root.Position - eRoot.Position).Magnitude
-                        if dist <= Config.ThreatRadius then
-                            local retreatDir = (root.Position - eRoot.Position).Unit
-                            hum:MoveTo(root.Position + retreatDir * 35)
-                            break
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if Config.CombatAura and root and (now - lastCombatTime >= (Config.CombatInterval + paceVariance)) then
-        local playersFolder = CachedRefs.PlayersFolder
-        if playersFolder then
-            local bestTarget = nil
-            local bestMetric = math.huge
-            for _, pChar in ipairs(playersFolder:GetChildren()) do
-                if pChar ~= char then
-                    local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-                    local pHum = pChar:FindFirstChildOfClass("Humanoid")
-                    if pRoot and pHum and pHum.Health > 0 then
-                        local dist = (root.Position - pRoot.Position).Magnitude
-                        if dist <= Config.CombatRange then
-                            if hasLineOfSight(root.Position, pRoot.Position, { char, pChar }) then
-                                local metric = (Config.TargetPriority == "Lowest HP") and pHum.Health or dist
-                                if metric < bestMetric then bestMetric = metric bestTarget = pRoot end
-                            end
-                        end
-                    end
-                end
-            end
-            if bestTarget then
-                autoEquipBestToolFor("Combat")
-                strikeTarget(bestTarget)
-                lastCombatTime = now
-                SessionStats.Kills = SessionStats.Kills + 1
-            end
-        end
-    end
-
-    if Config.AutoHeal and hum and (hum.Health / hum.MaxHealth * 100) <= Config.HealThreshold and (now - lastHealTime >= 0.4) then
-        if RemoteConsume then RemoteConsume:FireServer(Config.HealFood)
-        elseif RemoteUseBagItem then RemoteUseBagItem:FireServer(Config.HealFood) end
-        lastHealTime = now
-    end
-
-    if Config.ResourceAura and root and (now - lastResourceTime >= (Config.ResourceInterval + paceVariance)) then
-        local foundResource = nil
-        local nearestDist = Config.ResourceRange
-        local foundCategory = "Wood"
-        forEachResource(function(obj)
-            if obj:IsA("Model") or obj:IsA("BasePart") then
-                local n = obj.Name:lower()
-                local isMatch = false
-                local category = "Wood"
-                if Config.ResourceFilter == "All" then
-                    isMatch = n:find("tree") or n:find("rock") or n:find("ore") or n:find("iron") or n:find("gold") or
-                        n:find("crystal") or n:find("stone") or n:find("coal") or n:find("bush") or n:find("plant")
-                    if n:find("rock") or n:find("stone") then category = "Stone"
-                    elseif n:find("ore") or n:find("iron") or n:find("gold") or n:find("coal") then category = "Ore"
-                    elseif n:find("crystal") then category = "Crystal" end
-                elseif Config.ResourceFilter == "Wood" then
-                    isMatch = n:find("tree") or n:find("wood") or n:find("log") or n:find("bush"); category = "Wood"
-                elseif Config.ResourceFilter == "Stone" then
-                    isMatch = n:find("rock") or n:find("stone") or n:find("boulder"); category = "Stone"
-                elseif Config.ResourceFilter == "Ore" then
-                    isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("coal") or n:find("magnetite"); category = "Ore"
-                elseif Config.ResourceFilter == "Crystal" then
-                    isMatch = n:find("crystal") or n:find("emerald") or n:find("ruby") or n:find("pink"); category = "Crystal"
-                elseif Config.ResourceFilter == "Fiber" then
-                    isMatch = n:find("bush") or n:find("plant") or n:find("grass"); category = "Wood"
-                end
-                if isMatch then
-                    local p = obj:IsA("BasePart") and obj or getRootPart(obj)
-                    if p then
-                        local dist = (root.Position - p.Position).Magnitude
-                        if dist <= nearestDist and isResourceAccessible(root.Position, p.Position, obj) then
-                            nearestDist = dist; foundResource = p; foundCategory = category
-                        end
-                    end
+                processed += 1
+                if processed % 4096 == 0 then
+                    task.wait() -- entrega o frame pro jogo
                 end
             end
         end)
-        if foundResource then
-            autoEquipBestToolFor(foundCategory); strikeTarget(foundResource); lastResourceTime = now
+        if not ok then
+            warn("[ESP] Erro no scan de deuses: " .. tostring(err))
         end
-    end
+    end)
+end
 
-    if Config.CritterAura and root and (now - lastCritterTime >= (Config.CritterInterval + paceVariance)) then
-        local critters = CachedRefs.CrittersFolder
-        if critters then
-            local nearestCritter = nil
-            local nearestDist = Config.CritterRange
-            for _, critter in ipairs(critters:GetChildren()) do
-                local p = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("Torso") or
-                    critter:FindFirstChild("HumanoidRootPart") or getRootPart(critter)
-                if p then
-                    local dist = (root.Position - p.Position).Magnitude
-                    if dist <= nearestDist then nearestDist = dist; nearestCritter = p end
-                end
-            end
-            if nearestCritter then autoEquipBestToolFor("Critter"); strikeTarget(nearestCritter); lastCritterTime = now end
-        end
-    end
-
-    if Config.AutoFarm and root and hum then
-        if farmTarget and farmTarget.Parent and (now - farmTargetAcquiredTime < (Config.StuckTimeout or 6)) and isResourceAccessible(root.Position, farmTarget.Position, farmTarget.Parent) then
-            local targetPos = farmTarget.Position
-            local flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
-            local flatDist = (root.Position - flatTarget).Magnitude
-            if not farmApproachPos then farmApproachPos = flatTarget + (root.Position - flatTarget).Unit * 4.2 end
-            if flatDist > 5.2 then
-                if Config.FarmMovement == "Tween" or Config.FarmMovement == "Glide" then
-                    local moveDir = (farmApproachPos - root.Position)
-                    local hDir = Vector3.new(moveDir.X, 0, moveDir.Z)
-                    if hDir.Magnitude > 0.5 then
-                        local speed = Config.FarmSpeed or 36
-                        local targetVel = hDir.Unit * speed
-                        root.AssemblyLinearVelocity = Vector3.new(targetVel.X, root.AssemblyLinearVelocity.Y, targetVel.Z)
-                        root.CFrame = CFrame.new(root.Position, flatTarget)
-                    end
-                else
-                    if (now - lastFarmMoveTime >= 0.4) or (hum.MoveDirection.Magnitude < 0.05) then
-                        hum:MoveTo(farmApproachPos); lastFarmMoveTime = now
-                    end
-                end
-            else
-                if (flatTarget - root.Position).Magnitude > 0.1 then
-                    root.CFrame = root.CFrame:Lerp(CFrame.new(root.Position, flatTarget), 0.25)
-                end
-                local targetName = farmTarget.Parent and farmTarget.Parent.Name:lower() or farmTarget.Name:lower()
-                local cat = "Wood"
-                if targetName:find("rock") or targetName:find("stone") then cat = "Stone"
-                elseif targetName:find("ore") or targetName:find("iron") or targetName:find("gold") then cat = "Ore"
-                elseif targetName:find("crystal") then cat = "Crystal"
-                elseif farmTarget.Parent and (farmTarget.Parent.Parent == CachedRefs.CrittersFolder) then cat = "Critter" end
-                autoEquipBestToolFor(cat)
-                if now - lastFarmSwingTime >= (Config.ResourceInterval or 0.25) then
-                    strikeTarget(farmTarget); lastFarmSwingTime = now
-                end
-                local itemsFolder = CachedRefs.ItemsFolder
-                if itemsFolder then
-                    for _, item in ipairs(itemsFolder:GetChildren()) do
-                        local ip = item:IsA("BasePart") and item or getRootPart(item)
-                        if ip and (root.Position - ip.Position).Magnitude <= 20 then pickupItem(item) end
-                    end
-                end
-            end
-        else
-            farmTarget = nil; farmApproachPos = nil
-            local bestTarget = nil
-            local bestDist = Config.FarmRange or 80
-            if Config.FarmType == "Resource" or Config.FarmType == "Both" then
-                forEachResource(function(obj)
-                    if obj:IsA("Model") or obj:IsA("BasePart") then
-                        local n = obj.Name:lower()
-                        local isMatch = false
-                        if Config.FarmFilter == "All" then
-                            isMatch = n:find("tree") or n:find("rock") or n:find("ore") or n:find("iron") or
-                                n:find("gold") or n:find("crystal") or n:find("stone") or n:find("bush")
-                        elseif Config.FarmFilter == "Wood" then isMatch = n:find("tree") or n:find("wood") or n:find("bush")
-                        elseif Config.FarmFilter == "Stone" then isMatch = n:find("rock") or n:find("stone")
-                        elseif Config.FarmFilter == "Ore" then isMatch = n:find("ore") or n:find("iron") or n:find("gold")
-                        elseif Config.FarmFilter == "Crystal" then isMatch = n:find("crystal") end
-                        if isMatch then
-                            local p = obj:IsA("BasePart") and obj or getRootPart(obj)
-                            if p then
-                                local dist = (root.Position - p.Position).Magnitude
-                                if dist <= bestDist and isResourceAccessible(root.Position, p.Position, obj) then
-                                    bestDist = dist; bestTarget = p
-                                end
-                            end
-                        end
-                    end
-                end)
-            end
-            if not bestTarget and (Config.FarmType == "Critter" or Config.FarmType == "Both") then
-                local critters = CachedRefs.CrittersFolder
-                if critters then
-                    for _, critter in ipairs(critters:GetChildren()) do
-                        local p = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("HumanoidRootPart") or getRootPart(critter)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= bestDist then bestDist = dist; bestTarget = p end
-                        end
-                    end
-                end
-            end
-            if bestTarget then
-                farmTarget = bestTarget; farmTargetAcquiredTime = now
-                local targetPos = bestTarget.Position
-                local flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
-                farmApproachPos = flatTarget + (root.Position - flatTarget).Unit * 4.2
-                if Config.FarmMovement ~= "Tween" and Config.FarmMovement ~= "Glide" then hum:MoveTo(farmApproachPos) end
-                lastFarmMoveTime = now
-            end
-        end
-    end
-
-    if Config.AutoPickup and root and (now - lastPickupTime >= (Config.PickupInterval + paceVariance)) then
-        local itemsFolder = CachedRefs.ItemsFolder
-        if itemsFolder then
-            local targetItem = nil
-            local nearestDist = Config.PickupRange
-            for _, item in ipairs(itemsFolder:GetChildren()) do
-                if item:IsA("Model") or item:IsA("BasePart") then
-                    local n = item.Name:lower()
-                    local isMatch = false
-                    if Config.PickupFilter == "All" then
-                        isMatch = not item:FindFirstChildOfClass("Humanoid") and (item.Name ~= "Terrain") and not item:IsA("Terrain")
-                    elseif Config.PickupFilter == "Wood" then isMatch = n:find("wood") or n:find("log") or n:find("stick")
-                    elseif Config.PickupFilter == "Stone" then isMatch = n:find("stone") or n:find("rock")
-                    elseif Config.PickupFilter == "Ore" then isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("magnetite")
-                    elseif Config.PickupFilter == "Food" then isMatch = n:find("meat") or n:find("berry") or n:find("fruit") or n:find("apple")
-                    elseif Config.PickupFilter == "Weapon" then isMatch = n:find("sword") or n:find("axe") or n:find("pick") or n:find("bow") or n:find("hammer")
-                    elseif Config.PickupFilter == "Valuables" then isMatch = n:find("emerald") or n:find("god") or n:find("magnetite") or n:find("essence") or n:find("meteor") end
-                    if isMatch then
-                        local p = item:IsA("BasePart") and item or getRootPart(item)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= nearestDist then nearestDist = dist; targetItem = item end
-                        end
-                    end
-                end
-            end
-            if targetItem then pickupItem(targetItem); lastPickupTime = now end
-        end
-    end
-
-    if Config.AutoDropTrash and (now - lastDropTime >= 1.5) then
-        local bag = LocalPlayer.PlayerGui:FindFirstChild("MainGui") and
-            LocalPlayer.PlayerGui.MainGui:FindFirstChild("Panels") and
-            LocalPlayer.PlayerGui.MainGui.Panels:FindFirstChild("Bag")
-        if bag and RemoteDropBagItem then
-            for _, item in ipairs(bag:GetDescendants()) do
-                if item:IsA("TextLabel") and item.Name == "ItemName" then
-                    local n = item.Text:lower()
-                    if n:find("leaves") or n:find("grass") or n:find("bark") or n:find("twig") then
-                        local slotIndex = tonumber(item.Parent.Name) or 1
-                        RemoteDropBagItem:FireServer(slotIndex); break
-                    end
-                end
-            end
-        end
-        lastDropTime = now
-    end
-
-    if Config.AutoCraft and (now - lastCraftTime >= (Config.CraftInterval or 1.5)) then
-        if Config.CraftRecipe and Config.CraftRecipe ~= "" then
-            pcall(function()
-                local ItemIDS = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("ItemIDS") and require(RS.Modules.ItemIDS)
-                local id = ItemIDS and ItemIDS[Config.CraftRecipe]
-                if id and Packets and Packets.CraftItem then Packets.CraftItem.send(id) end
-            end)
-            if RemoteCraftItem then pcall(function() RemoteCraftItem:FireServer(Config.CraftRecipe) end) end
-        end
-        lastCraftTime = now
-    end
-
-    if Config.AutoPlant and root and (now - lastPlantTime >= 2.0) then
-        local deployables = CachedRefs.DeployablesFolder
-        if deployables then
-            for _, d in ipairs(deployables:GetChildren()) do
-                local n = d.Name:lower()
-                if n:find("plant box") or n:find("farm") or n:find("bush") or n:find("crop") then
-                    local p = getRootPart(d)
-                    if p and (root.Position - p.Position).Magnitude <= Config.PlantRange then
-                        if RemoteInteractStructure then
-                            RemoteInteractStructure:FireServer(d, "Harvest")
-                            RemoteInteractStructure:FireServer(d, "Plant")
-                        end
-                    end
-                end
-            end
-        end
-        lastPlantTime = now
-    end
-
-    if Config.AutoProcess and root and (now - lastProcessTime >= 2.0) then
-        local deployables = CachedRefs.DeployablesFolder
-        if deployables then
-            for _, d in ipairs(deployables:GetChildren()) do
-                local n = d.Name:lower()
-                if n:find("campfire") or n:find("furnace") or n:find("cauldron") or n:find("fire") then
-                    local p = getRootPart(d)
-                    if p and (root.Position - p.Position).Magnitude <= 25 then
-                        if RemoteInteractStructure then RemoteInteractStructure:FireServer(d, "Cook") end
-                    end
-                end
-            end
-        end
-        lastProcessTime = now
-    end
-
-    if Config.AutoChest and root and (now - lastChestTime >= 1.0) then
-        local deployables = CachedRefs.DeployablesFolder
-        if deployables then
-            for _, d in ipairs(deployables:GetChildren()) do
-                local n = d.Name:lower()
-                if n:find("chest") or n:find("crate") or n:find("box") then
-                    local p = getRootPart(d)
-                    if p then
-                        local dist = (root.Position - p.Position).Magnitude
-                        if dist <= Config.ChestRange then
-                            if RemoteInteractStructure then RemoteInteractStructure:FireServer(d, "Open"); SessionStats.ChestsOpened = SessionStats.ChestsOpened + 1 end
-                        end
-                    end
-                end
-            end
-        end
-        lastChestTime = now
-    end
-
-    if Config.AutoFishing and (now - lastFishingTime >= (Config.FishingDelay or 2)) then
-        if RemoteFishing then pcall(function() RemoteFishing:FireServer() end) end
-        lastFishingTime = now
-    end
-
-    if Config.ChatMessages and (now - lastChatTime >= (Config.ChatInterval or 30)) then
-        local chatService = game:GetService("Chat")
-        if chatService and Config.ChatText then pcall(function() chatService:Chat(LocalPlayer.Character, Config.ChatText, Enum.ChatColor.Blue) end) end
-        lastChatTime = now
-    end
-
-    if Config.Fullbright then
-        if Lighting.Ambient ~= Color3.new(1, 1, 1) then Lighting.Ambient = Color3.new(1, 1, 1) Lighting.OutdoorAmbient = Color3.new(1, 1, 1) Lighting.Brightness = 2 end
-    end
-
-    if Config.NoFog then
-        if Lighting.FogEnd ~= 100000 then Lighting.FogEnd = 100000 end
-        if atmosphere and atmosphere.Density ~= 0 then atmosphere.Density = 0 end
-    end
-
-    if Config.DisableParticles then
-        local disabled = false
-        for _, p in ipairs(Workspace:GetDescendants()) do
-            if p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") then
-                if p.Enabled then p.Enabled = false; disabled = true end
-            end
-        end
-        if not disabled then Config.DisableParticles = false end
+-- Detecção por EVENTO: novos deuses aparecem instantaneamente, custo ~zero
+track(Workspace.DescendantAdded:Connect(function(inst)
+    if Active and Settings.GodsESP then
+        TryRegisterGod(inst)
     end
 end))
 
-task.spawn(function()
-    while mainFrame.Parent do
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if root then
-            if not Config.ESPPlayers then clearESPCategory("player_")
-            else
-                local playersFolder = CachedRefs.PlayersFolder
-                if playersFolder then
-                    for _, pChar in ipairs(playersFolder:GetChildren()) do
-                        if pChar ~= char then
-                            local pRoot = pChar:FindFirstChild("HumanoidRootPart")
-                            local hum = pChar:FindFirstChildOfClass("Humanoid")
-                            if pRoot and hum and hum.Health > 0 then
-                                local dist = (root.Position - pRoot.Position).Magnitude
-                                if dist <= Config.ESPDistance then
-                                    local text = ""
-                                    if Config.ESPNames then text = text .. pChar.Name end
-                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                    getOrCreateESP("player_" .. pChar.Name, pRoot, text, Colors.AccentRed)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            if not Config.ESPCritters then clearESPCategory("critter_")
-            else
-                local critters = CachedRefs.CrittersFolder
-                if critters then
-                    for _, c in ipairs(critters:GetChildren()) do
-                        local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("HumanoidRootPart") or getRootPart(c)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= Config.ESPDistance then
-                                local text = Config.ESPNames and c.Name or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                getOrCreateESP("critter_" .. c:GetDebugId(), p, text, Colors.AccentOrange)
-                            end
-                        end
-                    end
-                end
-            end
-            if not Config.ESPResources then clearESPCategory("res_")
-            else
-                forEachResource(function(obj)
-                    local n = obj.Name:lower()
-                    if n:find("tree") or n:find("rock") or n:find("ore") or n:find("crystal") or n:find("gold") or n:find("iron") or n:find("stone") or n:find("bush") then
-                        local p = obj:IsA("BasePart") and obj or getRootPart(obj)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= Config.ESPDistance then
-                                local col = n:find("crystal") and Colors.AccentPurple or (n:find("ore") and Colors.AccentYellow or Colors.AccentGreen)
-                                local text = Config.ESPNames and obj.Name or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                getOrCreateESP("res_" .. obj:GetDebugId(), p, text, col)
-                            end
-                        end
-                    end
-                end)
-            end
-            if not Config.ESPItems then clearESPCategory("item_")
-            else
-                local items = CachedRefs.ItemsFolder
-                if items then
-                    for _, it in ipairs(items:GetChildren()) do
-                        if it:IsA("Model") or it:IsA("BasePart") then
-                            local n = it.Name:lower()
-                            if n:find("bag") or n:find("meat") or n:find("ore") or n:find("wood") or n:find("bar") or n:find("potion") or n:find("sword") then
-                                local p = it:IsA("BasePart") and it or getRootPart(it)
-                                if p then
-                                    local dist = (root.Position - p.Position).Magnitude
-                                    if dist <= Config.ESPDistance then
-                                        local text = Config.ESPNames and it.Name or ""
-                                        if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                        getOrCreateESP("item_" .. it:GetDebugId(), p, text, Colors.AccentCyan)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            if not Config.ESPChests then clearESPCategory("chest_")
-            else
-                local deployables = CachedRefs.DeployablesFolder
-                if deployables then
-                    for _, d in ipairs(deployables:GetChildren()) do
-                        local n = d.Name:lower()
-                        if n:find("chest") or n:find("crate") or n:find("box") then
-                            local p = getRootPart(d)
-                            if p then
-                                local dist = (root.Position - p.Position).Magnitude
-                                if dist <= Config.ESPDistance then
-                                    local text = Config.ESPNames and d.Name or ""
-                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                    getOrCreateESP("chest_" .. d:GetDebugId(), p, text, Colors.AccentYellow)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-            if not Config.ESPTraders then clearESPCategory("trader_")
-            else
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    local n = obj.Name:lower()
-                    if n:find("trader") or n:find("merchant") or n:find("shop") then
-                        local p = getRootPart(obj)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= Config.ESPDistance then
-                                local text = Config.ESPNames and ("Trader: " .. obj.Name) or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                getOrCreateESP("trader_" .. obj:GetDebugId(), p, text, Colors.AccentGreen)
-                            end
-                        end
-                    end
-                end
-            end
-            if not Config.ESPMeteors then clearESPCategory("meteor_")
-            else
-                for _, obj in ipairs(Workspace:GetChildren()) do
-                    local n = obj.Name:lower()
-                    if n:find("meteor") or n:find("god rock") or n:find("godrock") or n:find("god bag") then
-                        local p = getRootPart(obj)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= Config.ESPDistance then
-                                local text = Config.ESPNames and ("RARE: " .. obj.Name) or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
-                                getOrCreateESP("meteor_" .. obj:GetDebugId(), p, text, Colors.AccentPink)
-                                if Config.RareItemAlert and dist <= 120 then SendNotification("Identical", "Rare Spawn: " .. obj.Name, 2, "⭐") end
-                            end
-                        end
-                    end
-                end
+local function ClearGodsESP()
+    for god, data in pairs(GodESPData) do
+        if data.folder then pcall(function() data.folder:Destroy() end) end
+    end
+    table.clear(GodESPData)
+end
+
+--============================--
+-- ESP DE JOGADORES
+--============================--
+local function RemovePlayerVisuals(player)
+    local data = PlayerESPData[player]
+    if not data then return end
+    PlayerESPData[player] = nil
+    pcall(function() data.folder:Destroy() end)
+    pcall(function() data.box2d:Destroy() end)
+    pcall(function() data.healthbar:Destroy() end)
+    if data.box3d then pcall(function() data.box3d:Destroy() end) end
+    if data.skeletonLines then
+        for i = 1, #data.skeletonLines do
+            pcall(function() data.skeletonLines[i]:Remove() end)
+        end
+    end
+end
+
+local function CreatePlayerVisuals(player)
+    if player == LocalPlayer then return nil end
+    local data = PlayerESPData[player]
+    if data then return data end
+
+    local folder = Instance.new("Folder")
+    folder.Name = "PlayerVisuals_" .. player.Name
+
+    -- Chams (segue o personagem sozinho via Adornee)
+    local chams = Instance.new("Highlight")
+    chams.FillColor = Settings.PlayerColor
+    chams.FillTransparency = 0.7
+    chams.OutlineColor = Settings.PlayerColor
+    chams.OutlineTransparency = 0
+    chams.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    chams.Enabled = false
+    chams.Parent = folder
+
+    -- Billboard
+    local billboard = Instance.new("BillboardGui")
+    billboard.Size = UDim2.fromOffset(220, 58)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.Enabled = false
+    billboard.Parent = folder
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0, 24)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Settings.PlayerColor
+    nameLabel.TextStrokeTransparency = 0.3
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextScaled = true
+    nameLabel.Text = player.Name
+    nameLabel.Parent = billboard
+
+    local distLabel = Instance.new("TextLabel")
+    distLabel.Position = UDim2.fromOffset(0, 24)
+    distLabel.Size = UDim2.new(1, 0, 0, 16)
+    distLabel.BackgroundTransparency = 1
+    distLabel.TextColor3 = Settings.PlayerColor
+    distLabel.TextStrokeTransparency = 0.5
+    distLabel.Font = Enum.Font.Gotham
+    distLabel.TextScaled = true
+    distLabel.Text = ""
+    distLabel.Parent = billboard
+
+    local healthLabel = Instance.new("TextLabel")
+    healthLabel.Position = UDim2.fromOffset(0, 42)
+    healthLabel.Size = UDim2.new(1, 0, 0, 16)
+    healthLabel.BackgroundTransparency = 1
+    healthLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+    healthLabel.TextStrokeTransparency = 0.5
+    healthLabel.Font = Enum.Font.Gotham
+    healthLabel.TextScaled = true
+    healthLabel.Text = ""
+    healthLabel.Parent = billboard
+
+    -- Box 3D (SelectionBox no personagem, segue sozinho)
+    local box3d = Instance.new("SelectionBox")
+    box3d.SurfaceTransparency = 1
+    box3d.LineThickness = 0.05
+    box3d.Color3 = Settings.PlayerColor
+    box3d.Visible = false
+    box3d.Parent = Workspace.CurrentCamera
+
+    -- Box 2D
+    local box2d = Instance.new("Frame")
+    box2d.BackgroundColor3 = Color3.new(0, 0, 0)
+    box2d.BackgroundTransparency = 0.7
+    box2d.BorderSizePixel = 0
+    box2d.Visible = false
+    box2d.Parent = ScreenGui
+
+    local box2dStroke = Instance.new("UIStroke")
+    box2dStroke.Color = Settings.PlayerColor
+    box2dStroke.Thickness = 1.2
+    box2dStroke.Parent = box2d
+
+    -- Healthbar
+    local hbBg = Instance.new("Frame")
+    hbBg.Size = UDim2.fromOffset(4, 60)
+    hbBg.BackgroundColor3 = Color3.new(0, 0, 0)
+    hbBg.BackgroundTransparency = 0.5
+    hbBg.BorderSizePixel = 0
+    hbBg.Visible = false
+    hbBg.Parent = ScreenGui
+
+    local hbFill = Instance.new("Frame")
+    hbFill.AnchorPoint = Vector2.new(0, 1)
+    hbFill.Position = UDim2.new(0, 0, 1, 0)
+    hbFill.Size = UDim2.fromScale(1, 1)
+    hbFill.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+    hbFill.BorderSizePixel = 0
+    hbFill.Parent = hbBg
+
+    folder.Parent = PlayersFolder
+
+    data = {
+        player = player,
+        folder = folder,
+        chams = chams,
+        billboard = billboard,
+        nameLabel = nameLabel,
+        distLabel = distLabel,
+        healthLabel = healthLabel,
+        box3d = box3d,
+        box2d = box2d,
+        box2dStroke = box2dStroke,
+        healthbar = hbBg,
+        healthbarFill = hbFill,
+        skeletonLines = {},
+        lastHeavy = 0,
+        shown = false,
+        boxShown = false,
+        hbShown = false,
+        skelOn = false,
+        visible = false,
+    }
+    PlayerESPData[player] = data
+    return data
+end
+
+local function HideSkeleton(data)
+    if not data.skelOn then return end -- early-out: não faz loop à toa
+    data.skelOn = false
+    local lines = data.skeletonLines
+    for i = 1, #lines do
+        pcall(function() lines[i].Visible = false end)
+    end
+end
+
+local function UpdateSkeleton(data, char, cam, color)
+    if not Settings.PlayerSkeleton or not DrawingSupported or not char then
+        HideSkeleton(data)
+        return
+    end
+
+    local list = SKELETON_R6
+    if not char:FindFirstChild("Torso") then
+        list = char:FindFirstChild("UpperTorso") and SKELETON_R15 or nil
+    end
+    if not list then
+        HideSkeleton(data)
+        return
+    end
+
+    data.skelOn = true
+    local lines = data.skeletonLines
+    for i = 1, #list do
+        local line = lines[i]
+        if not line then
+            local ok, l = pcall(Drawing.new, "Line")
+            if ok then
+                l.Thickness = 1
+                l.Transparency = 1
+                l.Visible = false
+                lines[i] = l
+                line = l
             end
         end
-        task.wait(0.5)
+        if line then
+            local a = char:FindFirstChild(list[i][1])
+            local b = char:FindFirstChild(list[i][2])
+            if a and b then
+                local pa, oa = cam:WorldToViewportPoint(a.Position)
+                local pb, ob = cam:WorldToViewportPoint(b.Position)
+                if oa and ob then
+                    line.From = Vector2.new(pa.X, pa.Y)
+                    line.To = Vector2.new(pb.X, pb.Y)
+                    line.Color = color
+                    if not line.Visible then line.Visible = true end
+                elseif line.Visible then
+                    line.Visible = false
+                end
+            elseif line.Visible then
+                line.Visible = false
+            end
+        end
     end
-end)
-
-LocalPlayer.Idled:Connect(function()
-    if Config.AntiAFK then
-        local VirtualUser = game:GetService("VirtualUser")
-        VirtualUser:CaptureController()
-        VirtualUser:ClickButton2(Vector2.new(0, 0))
+    for i = #list + 1, #lines do
+        if lines[i] and lines[i].Visible then
+            lines[i].Visible = false
+        end
     end
-end)
+end
 
-SendNotification("Identical v5.0", "Material 3 · Mobile Optimized", 3, "✨")
+-- Atualização "pesada" (raycast, distância, textos): só a cada 150ms
+local function UpdatePlayerHeavy(player, data, cam)
+    local char = player.Character
+    local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and (char:FindFirstChild("HumanoidRootPart") or char.PrimaryPart or char:FindFirstChildWhichIsA("BasePart"))
+    local head = char and (char:FindFirstChild("Head") or root)
+
+    data.char = char
+    data.root = root
+    data.head = head
+
+    local visible = false
+    local dist = math.huge
+    local hp = 0
+
+    if root and head and humanoid and humanoid.Health > 0 then
+        dist = (root.Position - cam.CFrame.Position).Magnitude
+        hp = math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 0.01), 0, 1)
+        if dist <= Settings.PlayerMaxDist then
+            if Settings.PlayerVisCheck then
+                visible = IsVisible(head, cam.CFrame.Position, char)
+            else
+                visible = true
+            end
+        end
+    end
+
+    data.dist = dist
+    data.hp = hp
+    data.visible = visible
+
+    if not visible then
+        if data.shown then -- esconde UMA vez, não todo frame
+            data.shown = false
+            data.chams.Enabled = false
+            data.billboard.Enabled = false
+            if data.box3d then data.box3d.Visible = false end
+            data.box2d.Visible = false
+            data.healthbar.Visible = false
+            data.boxShown = false
+            data.hbShown = false
+            HideSkeleton(data)
+        end
+        return
+    end
+    data.shown = true
+
+    local color = Settings.PlayerColor
+    if Settings.PlayerTeamColor and player.Team then
+        color = player.TeamColor.Color
+    end
+    if data.color ~= color then -- cores só quando mudam
+        data.color = color
+        data.box2dStroke.Color = color
+        data.chams.FillColor = color
+        data.chams.OutlineColor = color
+        data.nameLabel.TextColor3 = color
+        data.distLabel.TextColor3 = color
+        if data.box3d then data.box3d.Color3 = color end
+    end
+
+    -- adornees só quando o personagem muda (não todo frame)
+    if data.lastAdorn ~= char then
+        data.lastAdorn = char
+        data.chams.Adornee = char
+        if data.box3d then data.box3d.Adornee = char end
+        data.billboard.Adornee = head
+    end
+
+    data.chams.Enabled = Settings.PlayerChams
+
+    if data.box3d then
+        if data.box3d.Parent ~= cam then -- câmera recriada (respawn)?
+            local ok = pcall(function() data.box3d.Parent = cam end)
+            if not ok then
+                local nb = Instance.new("SelectionBox")
+                nb.SurfaceTransparency = 1
+                nb.LineThickness = 0.05
+                nb.Color3 = color
+                nb.Adornee = char
+                nb.Parent = cam
+                data.box3d = nb
+            end
+        end
+        data.box3d.Visible = Settings.PlayerBox3D
+    end
+
+    local anyText = Settings.PlayerName or Settings.PlayerDistance or Settings.PlayerHealth
+    data.billboard.Enabled = anyText
+    if anyText then
+        data.nameLabel.Visible = Settings.PlayerName
+        data.distLabel.Visible = Settings.PlayerDistance
+        data.healthLabel.Visible = Settings.PlayerHealth
+
+        if Settings.PlayerName then
+            local t = player.Name
+            if player.DisplayName ~= player.Name then
+                t = player.DisplayName .. " (" .. player.Name .. ")"
+            end
+            if data.lastName ~= t then
+                data.lastName = t
+                data.nameLabel.Text = t
+            end
+        end
+        if Settings.PlayerDistance then
+            local t = string.format("%.0fm", dist)
+            if data.lastDist ~= t then
+                data.lastDist = t
+                data.distLabel.Text = t
+            end
+        end
+        if Settings.PlayerHealth then
+            local t = string.format("%d/%d", math.floor(humanoid.Health + 0.5), math.floor(humanoid.MaxHealth + 0.5))
+            if data.lastHpText ~= t then
+                data.lastHpText = t
+                data.healthLabel.Text = t
+            end
+        end
+    end
+end
+
+-- Atualização POR FRAME: só Box 2D + Healthbar + Skeleton (o resto segue sozinho)
+local function UpdatePlayerFrame(data, cam)
+    local char = data.char
+
+    if Settings.PlayerSkeleton and DrawingSupported and char then
+        UpdateSkeleton(data, char, cam, data.color or Settings.PlayerColor)
+    else
+        HideSkeleton(data)
+    end
+
+    if not (Settings.PlayerBox2D or Settings.PlayerHealthBar) then
+        if data.boxShown then data.boxShown = false; data.box2d.Visible = false end
+        if data.hbShown then data.hbShown = false; data.healthbar.Visible = false end
+        return
+    end
+
+    local head, root = data.head, data.root
+    if not head or not root then return end
+
+    local headPos, headOn = cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1, 0))
+    local footPos, footOn = cam:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+
+    if headOn and footOn then
+        local height = math.abs(footPos.Y - headPos.Y)
+        if height < 6 then height = 6 end
+        local width = math.max(height * 0.6, 10)
+        local x = headPos.X - width * 0.5
+        local y = math.min(headPos.Y, footPos.Y)
+
+        if Settings.PlayerBox2D then
+            data.box2d.Position = UDim2.fromOffset(x, y)
+            data.box2d.Size = UDim2.fromOffset(width, height)
+            if not data.boxShown then
+                data.boxShown = true
+                data.box2d.Visible = true
+            end
+        elseif data.boxShown then
+            data.boxShown = false
+            data.box2d.Visible = false
+        end
+
+        if Settings.PlayerHealthBar then
+            data.healthbar.Position = UDim2.fromOffset(x - 8, y)
+            data.healthbar.Size = UDim2.fromOffset(4, height)
+            if data.lastHp ~= data.hp then
+                data.lastHp = data.hp
+                data.healthbarFill.Size = UDim2.fromScale(1, data.hp)
+                data.healthbarFill.BackgroundColor3 = Color3.new(1 - data.hp, data.hp, 0)
+            end
+            if not data.hbShown then
+                data.hbShown = true
+                data.healthbar.Visible = true
+            end
+        elseif data.hbShown then
+            data.hbShown = false
+            data.healthbar.Visible = false
+        end
+    else
+        if data.boxShown then data.boxShown = false; data.box2d.Visible = false end
+        if data.hbShown then data.hbShown = false; data.healthbar.Visible = false end
+    end
+end
+
+local function ClearPlayersESP()
+    for player in pairs(PlayerESPData) do
+        RemovePlayerVisuals(player)
+    end
+    table.clear(PlayerESPData)
+end
+
+--============================--
+-- Cache de players (eventos, sem alocação por frame)
+--============================--
+track(Players.PlayerAdded:Connect(function(p)
+    if p ~= LocalPlayer then
+        CachedPlayers[#CachedPlayers + 1] = p
+    end
+end))
+
+track(Players.PlayerRemoving:Connect(function(p)
+    RemovePlayerVisuals(p)
+    for i = #CachedPlayers, 1, -1 do
+        if CachedPlayers[i] == p then
+            table.remove(CachedPlayers, i)
+            break
+        end
+    end
+end))
+
+for _, p in ipairs(Players:GetPlayers()) do
+    if p ~= LocalPlayer then
+        CachedPlayers[#CachedPlayers + 1] = p
+    end
+end
+
+--============================--
+-- LOOP PRINCIPAL (uma única conexão, trabalho mínimo por frame)
+--============================--
+local LastGodTick = 0
+
+track(RunService.RenderStepped:Connect(function()
+    if not Active then return end
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    local now = os.clock()
+
+    if Settings.PlayersESP then
+        local perFrame2D = Settings.PlayerBox2D or Settings.PlayerHealthBar
+            or (Settings.PlayerSkeleton and DrawingSupported)
+
+        for i = 1, #CachedPlayers do
+            local plr = CachedPlayers[i]
+            if plr.Parent then
+                local data = PlayerESPData[plr]
+                if not data then
+                    data = CreatePlayerVisuals(plr)
+                end
+                if data then
+                    if (now - data.lastHeavy) >= HEAVY_INTERVAL then
+                        data.lastHeavy = now
+                        UpdatePlayerHeavy(plr, data, cam)
+                    end
+                    if data.visible and perFrame2D then
+                        UpdatePlayerFrame(data, cam)
+                    end
+                end
+            else
+                RemovePlayerVisuals(plr)
+            end
+        end
+    end
+
+    -- Deuses: NADA por frame (billboard/highlight seguem sozinhos).
+    -- Só checagens leves a cada 150ms.
+    if Settings.GodsESP and (now - LastGodTick) >= GOD_INTERVAL then
+        LastGodTick = now
+        for god, data in pairs(GodESPData) do
+            UpdateGodVisuals(god, data, cam, now)
+        end
+    end
+end))
+
+--============================--
+-- Cleanup completo (usado ao reexecutar o script)
+--============================--
+local function FullCleanup()
+    Active = false
+    for i = 1, #Connections do
+        pcall(function() Connections[i]:Disconnect() end)
+    end
+    table.clear(Connections)
+
+    ClearPlayersESP()
+    for god, data in pairs(GodESPData) do
+        if data.folder then pcall(function() data.folder:Destroy() end) end
+    end
+    table.clear(GodESPData)
+
+    pcall(function() GodsFolder:Destroy() end)
+    pcall(function() PlayersFolder:Destroy() end)
+    pcall(function() ScreenGui:Destroy() end)
+    pcall(function() Rayfield:Destroy() end)
+
+    -- remove beacons de QUALQUER versão
+    pcall(function()
+        for _, inst in ipairs(Workspace:GetDescendants()) do
+            if inst.Name == "GodBeacon" then
+                inst:Destroy()
+            end
+        end
+    end)
+end
+
+getgenv().GodsPlayersESP_Destroy = FullCleanup
+
+--============================--
+-- INTERFACE RAYFIELD
+--============================--
+local Window = Rayfield:CreateWindow({
+    Name = "Gods & Players ESP",
+    Subtitle = "Booga Booga — v4 Otimizado",
+    Icon = 13641909418,
+    SidebarLayout = true,
+    DisableBuildWarnings = true,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "ESP_Valentin",
+        FileName = "Config",
+    },
+})
+
+local function AddText(tab, info)
+    if typeof(tab.CreateText) == "function" then
+        tab:CreateText(info)
+    elseif typeof(tab.CreateParagraph) == "function" then
+        tab:CreateParagraph(info)
+    end
+end
+
+-- ===== TAB: GODS =====
+local GodsTab = Window:CreateTab({ Name = "Gods ESP", Icon = 111088561600820 })
+
+GodsTab:CreateSection("Controles")
+GodsTab:CreateToggle({
+    Name = "Ativar ESP de Deuses",
+    CurrentValue = Settings.GodsESP,
+    Flag = "GodsESP",
+    Callback = function(v)
+        Settings.GodsESP = v
+        if v then
+            StartGodScan()
+        else
+            ClearGodsESP()
+        end
+    end,
+})
+
+GodsTab:CreateSection("Visual")
+GodsTab:CreateToggle({ Name = "Highlight (Brilho)", CurrentValue = Settings.GodHighlight, Flag = "GodHighlight", Callback = function(v) Settings.GodHighlight = v end })
+GodsTab:CreateToggle({ Name = "Mostrar Nome", CurrentValue = Settings.GodName, Flag = "GodName", Callback = function(v) Settings.GodName = v end })
+GodsTab:CreateToggle({ Name = "Mostrar Distância", CurrentValue = Settings.GodDistance, Flag = "GodDistance", Callback = function(v) Settings.GodDistance = v end })
+GodsTab:CreateToggle({ Name = "Verificar Visibilidade", CurrentValue = Settings.GodVisCheck, Flag = "GodVisCheck", Callback = function(v) Settings.GodVisCheck = v end })
+
+GodsTab:CreateSection("Cores")
+GodsTab:CreateColorPicker({ Name = "Cor dos Deuses", Color = Settings.GodColor, Flag = "GodColor", Callback = function(v) Settings.GodColor = v end })
+GodsTab:CreateSlider({ Name = "Distância Máxima", Range = {100, 20000}, Increment = 100, CurrentValue = Settings.GodMaxDist, Flag = "GodMaxDist", Callback = function(v) Settings.GodMaxDist = v end })
+
+GodsTab:CreateSection("Debug")
+GodsTab:CreateToggle({ Name = "Modo Debug (console)", CurrentValue = Settings.GodDebug, Flag = "GodDebug", Callback = function(v) Settings.GodDebug = v end })
+GodsTab:CreateButton({
+    Name = "Escanear Deuses Agora",
+    Callback = function()
+        StartGodScan()
+    end,
+})
+GodsTab:CreateButton({
+    Name = "Listar objetos com 'god' (ver console)",
+    Callback = function()
+        task.spawn(function()
+            local count = 0
+            for _, inst in ipairs(Workspace:GetDescendants()) do
+                if string.find(string.lower(inst.Name), "god", 1, true) then
+                    count += 1
+                    print("→ " .. inst:GetFullName() .. " (" .. inst.ClassName .. ")")
+                end
+            end
+            print("[GodESP] Total de objetos com 'god' no nome: " .. count)
+        end)
+    end,
+})
+
+AddText(GodsTab, {
+    Title = "Performance",
+    Content = "Deuses custam QUASE ZERO de FPS: o highlight/billboard seguem o modelo sozinhos e as checagens rodam só 6x por segundo. Novos deuses são detectados por evento, instantaneamente.",
+})
+
+-- ===== TAB: PLAYERS =====
+local PlayersTab = Window:CreateTab({ Name = "Players ESP", Icon = 13641909418 })
+
+PlayersTab:CreateSection("Controles")
+PlayersTab:CreateToggle({
+    Name = "Ativar ESP de Jogadores",
+    CurrentValue = Settings.PlayersESP,
+    Flag = "PlayersESP",
+    Callback = function(v)
+        Settings.PlayersESP = v
+        if not v then ClearPlayersESP() end
+    end,
+})
+
+PlayersTab:CreateSection("Boxes")
+PlayersTab:CreateToggle({ Name = "Box 2D", CurrentValue = Settings.PlayerBox2D, Flag = "PlayerBox2D", Callback = function(v) Settings.PlayerBox2D = v end })
+PlayersTab:CreateToggle({ Name = "Box 3D", CurrentValue = Settings.PlayerBox3D, Flag = "PlayerBox3D", Callback = function(v) Settings.PlayerBox3D = v end })
+
+PlayersTab:CreateSection("Informações")
+PlayersTab:CreateToggle({ Name = "Mostrar Nome", CurrentValue = Settings.PlayerName, Flag = "PlayerName", Callback = function(v) Settings.PlayerName = v end })
+PlayersTab:CreateToggle({ Name = "Mostrar Distância", CurrentValue = Settings.PlayerDistance, Flag = "PlayerDistance", Callback = function(v) Settings.PlayerDistance = v end })
+PlayersTab:CreateToggle({ Name = "Mostrar Vida", CurrentValue = Settings.PlayerHealth, Flag = "PlayerHealth", Callback = function(v) Settings.PlayerHealth = v end })
+PlayersTab:CreateToggle({ Name = "Healthbar 2D", CurrentValue = Settings.PlayerHealthBar, Flag = "PlayerHealthBar", Callback = function(v) Settings.PlayerHealthBar = v end })
+PlayersTab:CreateToggle({ Name = "Skeleton (custa mais FPS)", CurrentValue = Settings.PlayerSkeleton, Flag = "PlayerSkeleton", Callback = function(v) Settings.PlayerSkeleton = v end })
+
+PlayersTab:CreateSection("Visual")
+PlayersTab:CreateToggle({ Name = "Chams", CurrentValue = Settings.PlayerChams, Flag = "PlayerChams", Callback = function(v) Settings.PlayerChams = v end })
+PlayersTab:CreateToggle({ Name = "Verificar Visibilidade", CurrentValue = Settings.PlayerVisCheck, Flag = "PlayerVisCheck", Callback = function(v) Settings.PlayerVisCheck = v end })
+PlayersTab:CreateToggle({ Name = "Usar Cor do Time", CurrentValue = Settings.PlayerTeamColor, Flag = "PlayerTeamColor", Callback = function(v) Settings.PlayerTeamColor = v end })
+PlayersTab:CreateColorPicker({ Name = "Cor Padrão", Color = Settings.PlayerColor, Flag = "PlayerColor", Callback = function(v) Settings.PlayerColor = v end })
+PlayersTab:CreateSlider({ Name = "Distância Máxima", Range = {100, 10000}, Increment = 100, CurrentValue = Settings.PlayerMaxDist, Flag = "PlayerMaxDist", Callback = function(v) Settings.PlayerMaxDist = v end })
+
+AddText(PlayersTab, {
+    Title = "Performance",
+    Content = DrawingSupported
+        and "Chams/Nome/Vida/Box3D custam quase zero (seguem o personagem sozinhos, atualizados 6x/s). Só Box 2D, Healthbar e Skeleton rodam por frame — o Skeleton é o mais pesado."
+        or "Aviso: seu executor NÃO tem a biblioteca Drawing, então o Skeleton não funciona (o resto funciona normalmente).",
+})
+
+-- ===== TAB: MISC =====
+local MiscTab = Window:CreateTab({ Name = "Misc", Icon = 4779510615 })
+
+MiscTab:CreateButton({
+    Name = "Limpar beacons antigos (GodBeacon)",
+    Callback = function()
+        task.spawn(function()
+            local n = 0
+            for _, inst in ipairs(Workspace:GetDescendants()) do
+                if inst.Name == "GodBeacon" then
+                    inst:Destroy()
+                    n += 1
+                end
+            end
+            print("[ESP] GodBeacons removidos: " .. n)
+        end
+    end,
+})
+
+MiscTab:CreateButton({
+    Name = "Destruir este script (limpa tudo)",
+    Callback = function()
+        FullCleanup()
+    end,
+})
+
+AddText(MiscTab, {
+    Title = "Info",
+    Content = "Atalho da UI: Right Shift. Reexecutar o script é seguro: a instância anterior é destruída automaticamente. O Roblox renderiza no máximo 31 Highlights ao mesmo tempo (deuses + chams).",
+})
+
+--============================--
+-- Atalho da interface
+--============================--
+track(UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        pcall(function()
+            if typeof(Rayfield.Toggle) == "function" then
+                Rayfield:Toggle()
+            end
+        end)
+    end
+end))
+
+-- Scan inicial (caso a config salva já venha com o God ESP ligado)
+if Settings.GodsESP then
+    StartGodScan()
+end
+
+print("[GodsAndPlayersESP v4] Carregado e otimizado:")
+print("  • GodBeacon removido + varredura de beacons antigos ao iniciar")
+print("  • Scan do mapa em segundo plano (em pedaços, nunca trava)")
+print("  • Detecção por evento (DescendantAdded)")
+print("  • Deuses custam ~zero FPS; jogadores quase zero sem Box/Skeleton")
+print("  • Reexecutar é seguro (anti-duplicação via getgenv)")
