@@ -1,0 +1,3838 @@
+-- Script taken from https://xenoscripts.com website --
+-- Enhanced v3.0 - Blue Theme Edition --
+
+local cloneref = cloneref or function(o) return o end
+
+if getgenv and getgenv().IdenticalBoogaUnload then
+    pcall(getgenv().IdenticalBoogaUnload)
+end
+
+-- Services --
+local Players = cloneref(game:GetService("Players"))
+local RunService = cloneref(game:GetService("RunService"))
+local Workspace = cloneref(game:GetService("Workspace"))
+local UserInputService = cloneref(game:GetService("UserInputService"))
+local TweenService = cloneref(game:GetService("TweenService"))
+local CoreGui = cloneref(game:GetService("CoreGui"))
+local HttpService = cloneref(game:GetService("HttpService"))
+local Lighting = cloneref(game:GetService("Lighting"))
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
+
+-- Remote Events --
+local RS = game:GetService("ReplicatedStorage")
+local Events = RS:FindFirstChild("Events")
+local RemotePickup = Events and Events:FindFirstChild("Pickup")
+local RemoteUseBagItem = Events and Events:FindFirstChild("UseBagItem")
+local RemoteInteractStructure = Events and
+    (Events:FindFirstChild("InteractStructure") or Events:FindFirstChild("lnteractStructure"))
+local RemoteSwingTool = Events and Events:FindFirstChild("SwingTool")
+local RemoteCraftItem = Events and Events:FindFirstChild("CraftItem")
+local RemoteDropBagItem = Events and Events:FindFirstChild("DropBagItem")
+local RemoteEquipTool = Events and Events:FindFirstChild("EquipTool")
+local RemoteConsume = Events and Events:FindFirstChild("Consume")
+local RemoteFishing = Events and Events:FindFirstChild("Fishing")
+
+local Packets
+pcall(function()
+    if RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Packets") then
+        Packets = require(RS.Modules.Packets)
+    end
+end)
+
+local Clock
+pcall(function()
+    if RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("Clock") then
+        Clock = require(RS.Modules.Clock)
+    end
+end)
+
+-- Enhanced Config --
+local Config = {
+    -- Combat
+    CombatReach = true,
+    CombatAura = false,
+    CombatRange = 25,
+    CombatInterval = 0.25,
+    CombatIgnoreTribe = true,
+    TargetPriority = "Closest",
+    LineOfSight = false,
+    HumanizedPacing = true,
+    MicroBreaks = false,
+    AutoDodge = false,
+    DodgeThreshold = 15,
+
+    -- Aimbot
+    BowAimbot = false,
+    AimbotTarget = "Players",
+    AimbotPart = "Head",
+    AimbotRange = 250,
+    AimbotSmoothness = 0,
+    AimbotPrediction = true,
+    AimbotWallCheck = true,
+
+    -- Survival
+    AutoHeal = false,
+    HealThreshold = 60,
+    HealFood = "Cooked Meat",
+    ThreatProtection = false,
+    ThreatRadius = 35,
+    RetreatHealth = 35,
+
+    -- Pickup
+    AutoPickup = false,
+    PickupRange = 30,
+    PickupFilter = "All",
+    PickupInterval = 0.15,
+    AutoDropTrash = false,
+    RareItemAlert = true,
+
+    -- Auras
+    ResourceAura = false,
+    ResourceRange = 20,
+    ResourceInterval = 0.25,
+    ResourceFilter = "All",
+    CritterAura = false,
+    CritterRange = 20,
+    CritterInterval = 0.25,
+
+    -- Farm
+    AutoFarm = false,
+    FarmType = "Resource",
+    FarmFilter = "Wood",
+    FarmRange = 60,
+    FarmMovement = "Walk",
+    FarmSpeed = 36,
+    AutoEquipTool = true,
+    FilterUnreachable = true,
+    StuckTimeout = 6,
+    DeathRecovery = true,
+    SmartPathfinding = true,
+
+    -- Deployables
+    AutoChest = false,
+    ChestRange = 25,
+    AutoPlant = false,
+    PlantRange = 30,
+    AutoCraft = false,
+    CraftRecipe = "Campfire",
+    CraftInterval = 1.5,
+    AutoProcess = false,
+    AutoClaimDaily = false,
+
+    -- Boat
+    BoatCruise = false,
+    BoatSpeed = 45,
+
+    -- ESP
+    ESPCritters = false,
+    ESPResources = false,
+    ESPPlayers = false,
+    ESPItems = false,
+    ESPChests = false,
+    ESPTraders = false,
+    ESPMeteors = true,
+    ESPGodRock = true,
+    ESPDistance = 350,
+    ESPTracers = false,
+    ESPBoxes = false,
+    ESPHealthBars = false,
+    ESPNames = true,
+    ESPDistanceText = true,
+
+    -- Movement
+    SpeedEnabled = false,
+    SpeedValue = 20,
+    JumpEnabled = false,
+    JumpValue = 83,
+    InfiniteJump = false,
+    Noclip = false,
+    AntiAFK = true,
+    Fullbright = false,
+    NoFog = false,
+    DisableParticles = false,
+
+    -- Misc
+    UIKeybind = Enum.KeyCode.LeftControl,
+    StopKeybind = Enum.KeyCode.End,
+    Notifications = true,
+    ChatMessages = false,
+    ChatInterval = 30,
+    ChatText = "Identical v3.0",
+    AutoFishing = false,
+    FishingDelay = 2,
+    KillCounter = true,
+    ShowStats = false,
+
+    -- Waypoints
+    Waypoints = {}
+}
+
+-- Session Stats --
+local SessionStats = {
+    Kills = 0,
+    ResourcesGathered = 0,
+    ItemsPickedUp = 0,
+    ChestsOpened = 0,
+    DistanceWalked = 0,
+    SessionTime = 0,
+    StartTime = tick()
+}
+
+local activeConnections = {}
+local espStorage = {}
+local espFolder = CoreGui:FindFirstChild("Identical_ESP_Folder") or
+    LocalPlayer.PlayerGui:FindFirstChild("Identical_ESP_Folder")
+if not espFolder then
+    espFolder = Instance.new("Folder")
+    espFolder.Name = "Identical_ESP_Folder"
+    espFolder.Parent = (runContext == "CoreGui") and CoreGui or LocalPlayer.PlayerGui
+else
+    espFolder:ClearAllChildren()
+end
+
+for _, desc in ipairs(Workspace:GetDescendants()) do
+    if desc:IsA("BillboardGui") and (desc.Name == "ESP" or desc.Name:find("Identical_ESP")) then
+        pcall(function() desc:Destroy() end)
+    end
+end
+
+local function clearESPCategory(prefix)
+    for key, bb in pairs(espStorage) do
+        if key:sub(1, #prefix) == prefix then
+            pcall(function() bb:Destroy() end)
+            espStorage[key] = nil
+        end
+    end
+    if espFolder then
+        for _, child in ipairs(espFolder:GetChildren()) do
+            if child.Name:sub(1, #prefix) == prefix then
+                pcall(function() child:Destroy() end)
+            end
+        end
+    end
+end
+
+-- Blue Theme Colors --
+local Colors = {
+    Background       = Color3.fromRGB(10, 22, 40),
+    SidebarBg        = Color3.fromRGB(8, 16, 30),
+    BorderBlue       = Color3.fromRGB(0, 212, 255),
+    BorderSubtle     = Color3.fromRGB(30, 58, 95),
+    Divider          = Color3.fromRGB(25, 45, 75),
+
+    BluePrimary      = Color3.fromRGB(0, 212, 255),
+    BlueAccent       = Color3.fromRGB(14, 165, 233),
+    BlueMuted        = Color3.fromRGB(100, 116, 139),
+    BlueDark         = Color3.fromRGB(15, 35, 65),
+    BlueGlow         = Color3.fromRGB(56, 189, 248),
+
+    RowNormal        = Color3.fromRGB(13, 31, 60),
+    RowHover         = Color3.fromRGB(20, 45, 85),
+    ControlBg        = Color3.fromRGB(15, 35, 70),
+    InputBg          = Color3.fromRGB(10, 25, 50),
+
+    TextWhite        = Color3.fromRGB(240, 249, 255),
+    TextSubtle       = Color3.fromRGB(148, 163, 184),
+    TextMuted        = Color3.fromRGB(100, 116, 139),
+
+    AccentGreen      = Color3.fromRGB(16, 185, 129),
+    AccentRed        = Color3.fromRGB(239, 68, 68),
+    AccentOrange     = Color3.fromRGB(245, 158, 11),
+    AccentYellow     = Color3.fromRGB(250, 204, 21),
+    AccentPurple     = Color3.fromRGB(168, 85, 247),
+    AccentPink       = Color3.fromRGB(236, 72, 153),
+    DropdownSelected = Color3.fromRGB(20, 50, 90)
+}
+
+-- Original Lighting Values --
+local origLighting = {
+    Ambient = Lighting.Ambient,
+    OutdoorAmbient = Lighting.OutdoorAmbient,
+    Brightness = Lighting.Brightness,
+    FogEnd = Lighting.FogEnd
+}
+local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+local origAtmosphereDensity = atmosphere and atmosphere.Density or 0.3
+
+-- Config File Management --
+local CONFIG_FILE = "Identical/default_v3.json"
+local function LoadSavedConfig()
+    if isfile and isfile(CONFIG_FILE) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(CONFIG_FILE))
+        end)
+        if ok and type(data) == "table" then
+            for k, v in pairs(data) do
+                if Config[k] ~= nil then
+                    if k == "UIKeybind" or k == "StopKeybind" then
+                        if type(v) == "string" and Enum.KeyCode[v] then
+                            Config[k] = Enum.KeyCode[v]
+                        elseif typeof(v) == "EnumItem" then
+                            Config[k] = v
+                        end
+                    else
+                        Config[k] = v
+                    end
+                end
+            end
+            return true
+        end
+    end
+    return false
+end
+
+local function AutoSaveConfig()
+    if writefile then
+        pcall(function()
+            if makefolder and not isfolder("Identical") then
+                makefolder("Identical")
+            end
+            local payload = {}
+            for k, v in pairs(Config) do
+                if typeof(v) == "EnumItem" then
+                    payload[k] = v.Name
+                else
+                    payload[k] = v
+                end
+            end
+            writefile(CONFIG_FILE, HttpService:JSONEncode(payload))
+        end)
+    end
+end
+
+LoadSavedConfig()
+
+-- UI Setup --
+local function getGuiParent()
+    local ok, gui = pcall(function() return CoreGui end)
+    if ok and gui then return gui end
+    return LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "Identical_v3"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = getGuiParent()
+
+if getgenv then
+    getgenv().IdenticalBoogaUnload = function()
+        pcall(function() screenGui:Destroy() end)
+    end
+end
+
+-- Notification System --
+local notifContainer = Instance.new("Frame")
+notifContainer.Name = "Notifications"
+notifContainer.Size = UDim2.new(0, 350, 1, -40)
+notifContainer.Position = UDim2.new(1, -365, 0, 20)
+notifContainer.BackgroundTransparency = 1
+notifContainer.ZIndex = 1000
+notifContainer.Parent = screenGui
+
+local notifLayout = Instance.new("UIListLayout")
+notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
+notifLayout.Padding = UDim.new(0, 10)
+notifLayout.Parent = notifContainer
+
+local function SendNotification(title, text, duration, icon)
+    if not Config.Notifications then return end
+    duration = duration or 3
+    icon = icon or "ℹ️"
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 70)
+    card.BackgroundColor3 = Colors.Background
+    card.BackgroundTransparency = 0.1
+    card.BorderSizePixel = 0
+    card.ClipsDescendants = true
+    card.Parent = notifContainer
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Colors.BluePrimary
+    stroke.Thickness = 1.5
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = card
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = card
+
+    -- Gradient Border Animation
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Colors.BluePrimary),
+        ColorSequenceKeypoint.new(0.5, Colors.BlueGlow),
+        ColorSequenceKeypoint.new(1, Colors.BluePrimary)
+    })
+    gradient.Rotation = 0
+    gradient.Parent = stroke
+
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Size = UDim2.new(0, 40, 1, 0)
+    iconLabel.Position = UDim2.new(0, 0, 0, 0)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Text = icon
+    iconLabel.TextSize = 24
+    iconLabel.Parent = card
+
+    local topBar = Instance.new("Frame")
+    topBar.Size = UDim2.new(1, -50, 0, 22)
+    topBar.BackgroundTransparency = 1
+    topBar.Position = UDim2.new(0, 45, 0, 8)
+    topBar.Parent = card
+
+    local tLabel = Instance.new("TextLabel")
+    tLabel.Size = UDim2.new(1, 0, 1, 0)
+    tLabel.BackgroundTransparency = 1
+    tLabel.Font = Enum.Font.GothamBold
+    tLabel.Text = title
+    tLabel.TextColor3 = Colors.BluePrimary
+    tLabel.TextSize = 13
+    tLabel.TextXAlignment = Enum.TextXAlignment.Left
+    tLabel.Parent = topBar
+
+    local mLabel = Instance.new("TextLabel")
+    mLabel.Size = UDim2.new(1, -50, 0, 30)
+    mLabel.Position = UDim2.new(0, 45, 0, 32)
+    mLabel.BackgroundTransparency = 1
+    mLabel.Font = Enum.Font.Gotham
+    mLabel.Text = text
+    mLabel.TextColor3 = Colors.TextSubtle
+    mLabel.TextSize = 11
+    mLabel.TextXAlignment = Enum.TextXAlignment.Left
+    mLabel.TextWrapped = true
+    mLabel.Parent = card
+
+    -- Entry Animation
+    card.Position = card.Position + UDim2.new(1, 20, 0, 0)
+    TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = card.Position - UDim2.new(1, 20, 0, 0)
+    }):Play()
+
+    task.delay(duration, function()
+        TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            BackgroundTransparency = 1,
+            Position = card.Position + UDim2.new(1, 20, 0, 0)
+        }):Play()
+        task.wait(0.35)
+        card:Destroy()
+    end)
+end
+
+-- Toggle UI Visibility --
+local ToggleUiVisibility
+
+-- Floating Action Button --
+local floatingCrescent = Instance.new("ImageButton")
+floatingCrescent.Name = "FloatingCrescent"
+floatingCrescent.Size = UDim2.new(0, 50, 0, 50)
+floatingCrescent.Position = UDim2.new(0, 20, 0, 20)
+floatingCrescent.BackgroundColor3 = Colors.BlueDark
+floatingCrescent.BorderSizePixel = 0
+floatingCrescent.Visible = false
+floatingCrescent.ZIndex = 1000
+floatingCrescent.Parent = screenGui
+
+local fcCorner = Instance.new("UICorner")
+fcCorner.CornerRadius = UDim.new(1, 0)
+fcCorner.Parent = floatingCrescent
+
+local fcStroke = Instance.new("UIStroke")
+fcStroke.Color = Colors.BluePrimary
+fcStroke.Thickness = 2
+fcStroke.Parent = floatingCrescent
+
+local fcIconContainer = Instance.new("Frame")
+fcIconContainer.Name = "Icon"
+fcIconContainer.Size = UDim2.new(0, 28, 0, 28)
+fcIconContainer.Position = UDim2.new(0.5, -14, 0.5, -14)
+fcIconContainer.BackgroundTransparency = 1
+fcIconContainer.ClipsDescendants = true
+fcIconContainer.Parent = floatingCrescent
+
+local fcOuter = Instance.new("Frame")
+fcOuter.Name = "Outer"
+fcOuter.Size = UDim2.new(0, 28, 0, 28)
+fcOuter.BackgroundColor3 = Colors.BluePrimary
+fcOuter.BorderSizePixel = 0
+fcOuter.Parent = fcIconContainer
+
+local fcOuterCorner = Instance.new("UICorner")
+fcOuterCorner.CornerRadius = UDim.new(1, 0)
+fcOuterCorner.Parent = fcOuter
+
+local fcCutout = Instance.new("Frame")
+fcCutout.Name = "Cutout"
+fcCutout.Size = UDim2.new(0, 24, 0, 24)
+fcCutout.Position = UDim2.new(0, 8, 0, -2)
+fcCutout.BackgroundColor3 = Colors.BlueDark
+fcCutout.BorderSizePixel = 0
+fcCutout.Parent = fcOuter
+
+local fcCutoutCorner = Instance.new("UICorner")
+fcCutoutCorner.CornerRadius = UDim.new(1, 0)
+fcCutoutCorner.Parent = fcCutout
+
+local fcDragging = false
+local fcDragInput, fcDragStart, fcStartPos
+
+floatingCrescent.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        fcDragging = true
+        fcDragStart = input.Position
+        fcStartPos = floatingCrescent.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                fcDragging = false
+            end
+        end)
+    end
+end)
+
+floatingCrescent.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        fcDragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == fcDragInput and fcDragging then
+        local delta = input.Position - fcDragStart
+        floatingCrescent.Position = UDim2.new(fcStartPos.X.Scale, fcStartPos.X.Offset + delta.X, fcStartPos.Y.Scale,
+            fcStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+floatingCrescent.MouseEnter:Connect(function()
+    TweenService:Create(floatingCrescent, TweenInfo.new(0.15), { BackgroundColor3 = Colors.BlueDark }):Play()
+    TweenService:Create(fcStroke, TweenInfo.new(0.15), { Color = Colors.BlueGlow, Thickness = 3 }):Play()
+end)
+
+floatingCrescent.MouseLeave:Connect(function()
+    TweenService:Create(floatingCrescent, TweenInfo.new(0.15), { BackgroundColor3 = Colors.BlueDark }):Play()
+    TweenService:Create(fcStroke, TweenInfo.new(0.15), { Color = Colors.BluePrimary, Thickness = 2 }):Play()
+end)
+
+floatingCrescent.MouseButton1Click:Connect(function()
+    if ToggleUiVisibility then ToggleUiVisibility() end
+end)
+
+-- Main Frame --
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 720, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -360, 0.5, -250)
+mainFrame.BackgroundColor3 = Colors.Background
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+-- Animated Gradient Border --
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Colors.BorderBlue
+mainStroke.Thickness = 2
+mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+mainStroke.Parent = mainFrame
+
+local mainGradient = Instance.new("UIGradient")
+mainGradient.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Colors.BluePrimary),
+    ColorSequenceKeypoint.new(0.5, Colors.BlueGlow),
+    ColorSequenceKeypoint.new(1, Colors.BluePrimary)
+})
+mainGradient.Rotation = 0
+mainGradient.Parent = mainStroke
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+-- Background Particles --
+local particleFrame = Instance.new("Frame")
+particleFrame.Name = "Particles"
+particleFrame.Size = UDim2.new(1, 0, 1, 0)
+particleFrame.BackgroundTransparency = 1
+particleFrame.ClipsDescendants = true
+particleFrame.ZIndex = 0
+particleFrame.Parent = mainFrame
+
+local function createParticle()
+    local particle = Instance.new("Frame")
+    particle.Size = UDim2.new(0, math.random(2, 5), 0, math.random(2, 5))
+    particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
+    particle.BackgroundColor3 = Colors.BluePrimary
+    particle.BackgroundTransparency = math.random(70, 90) / 100
+    particle.BorderSizePixel = 0
+    particle.Parent = particleFrame
+    
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = particle
+    
+    local duration = math.random(10, 20)
+    local targetY = particle.Position.Y.Scale - 1
+    
+    TweenService:Create(particle, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        Position = UDim2.new(particle.Position.X.Scale, 0, targetY, 0),
+        BackgroundTransparency = 1
+    }):Play()
+    
+    task.delay(duration, function()
+        particle:Destroy()
+    end)
+end
+
+-- Generate initial particles
+for i = 1, 20 do
+    task.delay(i * 0.5, function()
+        while mainFrame.Parent do
+            createParticle()
+            task.wait(math.random(2, 5))
+        end
+    end)
+end
+
+-- Title Bar --
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.BackgroundColor3 = Colors.SidebarBg
+titleBar.BorderSizePixel = 0
+titleBar.ZIndex = 2
+titleBar.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+local titleBottomFill = Instance.new("Frame")
+titleBottomFill.Name = "BottomFill"
+titleBottomFill.Size = UDim2.new(1, 0, 0, 10)
+titleBottomFill.Position = UDim2.new(0, 0, 1, -10)
+titleBottomFill.BackgroundColor3 = Colors.SidebarBg
+titleBottomFill.BorderSizePixel = 0
+titleBottomFill.ZIndex = 2
+titleBottomFill.Parent = titleBar
+
+local titleDiv = Instance.new("Frame")
+titleDiv.Size = UDim2.new(1, 0, 0, 1)
+titleDiv.Position = UDim2.new(0, 0, 1, -1)
+titleDiv.BackgroundColor3 = Colors.BorderBlue
+titleDiv.BorderSizePixel = 0
+titleDiv.ZIndex = 2
+titleDiv.Parent = titleBar
+
+-- Logo Icon --
+local logoContainer = Instance.new("Frame")
+logoContainer.Name = "LogoIcon"
+logoContainer.Size = UDim2.new(0, 20, 0, 20)
+logoContainer.Position = UDim2.new(0, 14, 0.5, -10)
+logoContainer.BackgroundTransparency = 1
+logoContainer.ClipsDescendants = true
+logoContainer.ZIndex = 3
+logoContainer.Parent = titleBar
+
+local logoOuter = Instance.new("Frame")
+logoOuter.Name = "Outer"
+logoOuter.Size = UDim2.new(0, 20, 0, 20)
+logoOuter.BackgroundColor3 = Colors.BluePrimary
+logoOuter.BorderSizePixel = 0
+logoOuter.ZIndex = 3
+logoOuter.Parent = logoContainer
+
+local logoOuterCorner = Instance.new("UICorner")
+logoOuterCorner.CornerRadius = UDim.new(1, 0)
+logoOuterCorner.Parent = logoOuter
+
+local logoCutout = Instance.new("Frame")
+logoCutout.Name = "Cutout"
+logoCutout.Size = UDim2.new(0, 16, 0, 16)
+logoCutout.Position = UDim2.new(0, 6, 0, -2)
+logoCutout.BackgroundColor3 = Colors.SidebarBg
+logoCutout.BorderSizePixel = 0
+logoCutout.ZIndex = 4
+logoCutout.Parent = logoOuter
+
+local logoCutoutCorner = Instance.new("UICorner")
+logoCutoutCorner.CornerRadius = UDim.new(1, 0)
+logoCutoutCorner.Parent = logoCutout
+
+local brandTitle = Instance.new("TextLabel")
+brandTitle.Name = "BrandTitle"
+brandTitle.Size = UDim2.new(0, 160, 1, 0)
+brandTitle.Position = UDim2.new(0, 42, 0, 0)
+brandTitle.BackgroundTransparency = 1
+brandTitle.Font = Enum.Font.GothamBold
+brandTitle.Text = "IDENTICAL v3.0"
+brandTitle.TextColor3 = Colors.BluePrimary
+brandTitle.TextSize = 14
+brandTitle.TextXAlignment = Enum.TextXAlignment.Left
+brandTitle.ZIndex = 3
+brandTitle.Parent = titleBar
+
+local gameSubtitle = Instance.new("TextLabel")
+gameSubtitle.Name = "GameSubtitle"
+gameSubtitle.Size = UDim2.new(0, 150, 1, 0)
+gameSubtitle.Position = UDim2.new(0, 145, 0, 0)
+gameSubtitle.BackgroundTransparency = 1
+gameSubtitle.Font = Enum.Font.Gotham
+gameSubtitle.Text = "BOOGA BOOGA"
+gameSubtitle.TextColor3 = Colors.BlueMuted
+gameSubtitle.TextSize = 10
+gameSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+gameSubtitle.ZIndex = 3
+gameSubtitle.Parent = titleBar
+
+-- Window Controls --
+local winControls = Instance.new("Frame")
+winControls.Size = UDim2.new(0, 65, 1, 0)
+winControls.Position = UDim2.new(1, -70, 0, 0)
+winControls.BackgroundTransparency = 1
+winControls.ZIndex = 3
+winControls.Parent = titleBar
+
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 26, 0, 26)
+minBtn.Position = UDim2.new(0, 4, 0.5, -13)
+minBtn.BackgroundColor3 = Colors.ControlBg
+minBtn.Font = Enum.Font.GothamBold
+minBtn.Text = "—"
+minBtn.TextColor3 = Colors.BluePrimary
+minBtn.TextSize = 11
+minBtn.BorderSizePixel = 0
+minBtn.ZIndex = 3
+minBtn.Parent = winControls
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 4)
+minCorner.Parent = minBtn
+
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 26, 0, 26)
+closeBtn.Position = UDim2.new(0, 34, 0.5, -13)
+closeBtn.BackgroundColor3 = Colors.ControlBg
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Text = "×"
+closeBtn.TextColor3 = Colors.AccentRed
+closeBtn.TextSize = 14
+closeBtn.BorderSizePixel = 0
+closeBtn.ZIndex = 3
+closeBtn.Parent = winControls
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 4)
+closeCorner.Parent = closeBtn
+
+-- Window Dragging --
+local dragging = false
+local dragInput, dragStart, startPos
+
+titleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+
+titleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        dragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- Body Frame --
+local bodyFrame = Instance.new("Frame")
+bodyFrame.Name = "Body"
+bodyFrame.Size = UDim2.new(1, 0, 1, -64)
+bodyFrame.Position = UDim2.new(0, 0, 0, 40)
+bodyFrame.BackgroundTransparency = 1
+bodyFrame.ZIndex = 2
+bodyFrame.Parent = mainFrame
+
+-- Sidebar --
+local sidebar = Instance.new("Frame")
+sidebar.Name = "Sidebar"
+sidebar.Size = UDim2.new(0, 150, 1, 0)
+sidebar.BackgroundColor3 = Colors.SidebarBg
+sidebar.BorderSizePixel = 0
+sidebar.ZIndex = 2
+sidebar.Parent = bodyFrame
+
+local sideDiv = Instance.new("Frame")
+sideDiv.Size = UDim2.new(0, 1, 1, 0)
+sideDiv.Position = UDim2.new(1, -1, 0, 0)
+sideDiv.BackgroundColor3 = Colors.Divider
+sideDiv.BorderSizePixel = 0
+sideDiv.ZIndex = 2
+sideDiv.Parent = sidebar
+
+-- Search Box --
+local searchBox = Instance.new("TextBox")
+searchBox.Name = "SearchBar"
+searchBox.Size = UDim2.new(1, -16, 0, 28)
+searchBox.Position = UDim2.new(0, 8, 0, 8)
+searchBox.BackgroundColor3 = Colors.InputBg
+searchBox.Font = Enum.Font.Gotham
+searchBox.PlaceholderText = "🔍 Search..."
+searchBox.PlaceholderColor3 = Colors.TextMuted
+searchBox.Text = ""
+searchBox.TextColor3 = Colors.TextWhite
+searchBox.TextSize = 11
+searchBox.TextXAlignment = Enum.TextXAlignment.Left
+searchBox.BorderSizePixel = 0
+searchBox.ClearTextOnFocus = false
+searchBox.ZIndex = 3
+searchBox.Parent = sidebar
+
+local searchPad = Instance.new("UIPadding")
+searchPad.PaddingLeft = UDim.new(0, 8)
+searchPad.Parent = searchBox
+
+local searchCorner = Instance.new("UICorner")
+searchCorner.CornerRadius = UDim.new(0, 4)
+searchCorner.Parent = searchBox
+
+-- Nav List --
+local navList = Instance.new("ScrollingFrame")
+navList.Name = "NavList"
+navList.Size = UDim2.new(1, 0, 1, -44)
+navList.Position = UDim2.new(0, 0, 0, 42)
+navList.BackgroundTransparency = 1
+navList.BorderSizePixel = 0
+navList.ScrollBarThickness = 2
+navList.ScrollBarImageColor3 = Colors.BorderSubtle
+navList.CanvasSize = UDim2.new(0, 0, 0, 0)
+navList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+navList.ZIndex = 2
+navList.Parent = sidebar
+
+local navLayout = Instance.new("UIListLayout")
+navLayout.SortOrder = Enum.SortOrder.LayoutOrder
+navLayout.Padding = UDim.new(0, 4)
+navLayout.Parent = navList
+
+local navPad = Instance.new("UIPadding")
+navPad.PaddingTop = UDim.new(0, 6)
+navPad.PaddingLeft = UDim.new(0, 8)
+navPad.PaddingRight = UDim.new(0, 8)
+navPad.Parent = navList
+
+-- Content Area --
+local contentArea = Instance.new("Frame")
+contentArea.Name = "ContentArea"
+contentArea.Size = UDim2.new(1, -150, 1, 0)
+contentArea.Position = UDim2.new(0, 150, 0, 0)
+contentArea.BackgroundTransparency = 1
+contentArea.ZIndex = 2
+contentArea.Parent = bodyFrame
+
+local tabFrames = {}
+local tabButtons = {}
+local rowSearchIndex = {}
+local ctrls = {}
+
+local function switchTab(tabName)
+    for name, frame in pairs(tabFrames) do
+        frame.Visible = (name == tabName)
+    end
+    for name, btn in pairs(tabButtons) do
+        if name == tabName then
+            TweenService:Create(btn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Colors.BlueDark,
+                TextColor3 = Colors.TextWhite
+            }):Play()
+            local pill = btn:FindFirstChild("ActivePill")
+            if pill then pill.Visible = true end
+            local icon = btn:FindFirstChild("Icon")
+            if icon then icon.TextColor3 = Colors.BluePrimary end
+        else
+            TweenService:Create(btn, TweenInfo.new(0.2), {
+                BackgroundColor3 = Colors.SidebarBg,
+                TextColor3 = Colors.TextSubtle
+            }):Play()
+            local pill = btn:FindFirstChild("ActivePill")
+            if pill then pill.Visible = false end
+            local icon = btn:FindFirstChild("Icon")
+            if icon then icon.TextColor3 = Colors.TextMuted end
+        end
+    end
+end
+
+local function createTab(name, icon)
+    local btn = Instance.new("TextButton")
+    btn.Name = "TabBtn_" .. name
+    btn.Size = UDim2.new(1, 0, 0, 32)
+    btn.BackgroundColor3 = Colors.SidebarBg
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = name
+    btn.TextColor3 = Colors.TextSubtle
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.BorderSizePixel = 0
+    btn.ZIndex = 3
+    btn.Parent = navList
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+
+    local btnPad = Instance.new("UIPadding")
+    btnPad.PaddingLeft = UDim.new(0, 14)
+    btnPad.Parent = btn
+
+    local iconLabel = Instance.new("TextLabel")
+    iconLabel.Name = "Icon"
+    iconLabel.Size = UDim2.new(0, 20, 0, 20)
+    iconLabel.Position = UDim2.new(0, 0, 0.5, -10)
+    iconLabel.BackgroundTransparency = 1
+    iconLabel.Text = icon or ""
+    iconLabel.TextSize = 14
+    iconLabel.TextColor3 = Colors.TextMuted
+    iconLabel.ZIndex = 4
+    iconLabel.Parent = btn
+
+    local textLbl = Instance.new("TextLabel")
+    textLbl.Size = UDim2.new(1, -24, 1, 0)
+    textLbl.Position = UDim2.new(0, 24, 0, 0)
+    textLbl.BackgroundTransparency = 1
+    textLbl.Text = name
+    textLbl.TextColor3 = btn.TextColor3
+    textLbl.TextSize = 12
+    textLbl.Font = Enum.Font.GothamBold
+    textLbl.TextXAlignment = Enum.TextXAlignment.Left
+    textLbl.ZIndex = 4
+    textLbl.Parent = btn
+
+    btn.Text = ""
+
+    local pill = Instance.new("Frame")
+    pill.Name = "ActivePill"
+    pill.Size = UDim2.new(0, 3, 0, 18)
+    pill.Position = UDim2.new(0, -10, 0.5, -9)
+    pill.BackgroundColor3 = Colors.BluePrimary
+    pill.BorderSizePixel = 0
+    pill.Visible = false
+    pill.ZIndex = 3
+    pill.Parent = btn
+
+    local pillCorner = Instance.new("UICorner")
+    pillCorner.CornerRadius = UDim.new(0, 2)
+    pillCorner.Parent = pill
+
+    btn.MouseButton1Click:Connect(function()
+        switchTab(name)
+    end)
+
+    local page = Instance.new("ScrollingFrame")
+    page.Name = "TabPage_" .. name
+    page.Size = UDim2.new(1, 0, 1, 0)
+    page.BackgroundTransparency = 1
+    page.BorderSizePixel = 0
+    page.ScrollBarThickness = 3
+    page.ScrollBarImageColor3 = Colors.BluePrimary
+    page.CanvasSize = UDim2.new(0, 0, 0, 0)
+    page.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    page.Visible = false
+    page.ZIndex = 2
+    page.Parent = contentArea
+
+    local pageLayout = Instance.new("UIListLayout")
+    pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    pageLayout.Padding = UDim.new(0, 12)
+    pageLayout.Parent = page
+
+    local pagePad = Instance.new("UIPadding")
+    pagePad.PaddingTop = UDim.new(0, 12)
+    pagePad.PaddingBottom = UDim.new(0, 16)
+    pagePad.PaddingLeft = UDim.new(0, 14)
+    pagePad.PaddingRight = UDim.new(0, 14)
+    pagePad.Parent = page
+
+    tabFrames[name] = page
+    tabButtons[name] = btn
+
+    return page
+end
+
+-- Create Tabs with Icons --
+local tabs = {
+    Home   = createTab("Home", "🏠"),
+    Combat = createTab("Combat", "⚔️"),
+    Gather = createTab("Gather", "🎯"),
+    Farm   = createTab("Farm", "🌾"),
+    ESP    = createTab("ESP", "👁️"),
+    Misc   = createTab("Misc", "⚙️"),
+    Stats  = createTab("Stats", "📊"),
+    Waypoints = createTab("Waypoints", "📍")
+}
+
+-- Footer Bar --
+local footerBar = Instance.new("Frame")
+footerBar.Name = "FooterBar"
+footerBar.Size = UDim2.new(1, 0, 0, 24)
+footerBar.Position = UDim2.new(0, 0, 1, -24)
+footerBar.BackgroundColor3 = Colors.SidebarBg
+footerBar.BorderSizePixel = 0
+footerBar.ZIndex = 2
+footerBar.Parent = mainFrame
+
+local footerCorner = Instance.new("UICorner")
+footerCorner.CornerRadius = UDim.new(0, 10)
+footerCorner.Parent = footerBar
+
+local footerTopFill = Instance.new("Frame")
+footerTopFill.Name = "TopFill"
+footerTopFill.Size = UDim2.new(1, 0, 0, 10)
+footerTopFill.Position = UDim2.new(0, 0, 0, 0)
+footerTopFill.BackgroundColor3 = Colors.SidebarBg
+footerTopFill.BorderSizePixel = 0
+footerTopFill.ZIndex = 2
+footerTopFill.Parent = footerBar
+
+local footerDiv = Instance.new("Frame")
+footerDiv.Size = UDim2.new(1, 0, 0, 1)
+footerDiv.BackgroundColor3 = Colors.BorderBlue
+footerDiv.BorderSizePixel = 0
+footerDiv.ZIndex = 3
+footerDiv.Parent = footerBar
+
+local footerBrand = Instance.new("TextLabel")
+footerBrand.Size = UDim2.new(0, 220, 1, 0)
+footerBrand.Position = UDim2.new(0, 12, 0, 0)
+footerBrand.BackgroundTransparency = 1
+footerBrand.Font = Enum.Font.Gotham
+footerBrand.Text = "Identical v3.0 - Booga Booga"
+footerBrand.TextColor3 = Colors.TextMuted
+footerBrand.TextSize = 10
+footerBrand.TextXAlignment = Enum.TextXAlignment.Left
+footerBrand.ZIndex = 3
+footerBrand.Parent = footerBar
+
+local footerKey = Instance.new("TextLabel")
+footerKey.Size = UDim2.new(0, 220, 1, 0)
+footerKey.Position = UDim2.new(1, -232, 0, 0)
+footerKey.BackgroundTransparency = 1
+footerKey.Font = Enum.Font.Gotham
+footerKey.Text = "[L-CTRL] Menu | [END] Stop All"
+footerKey.TextColor3 = Colors.TextMuted
+footerKey.TextSize = 10
+footerKey.TextXAlignment = Enum.TextXAlignment.Right
+footerKey.ZIndex = 3
+footerKey.Parent = footerBar
+
+local footerVersion = Instance.new("TextLabel")
+footerVersion.Size = UDim2.new(0, 80, 1, 0)
+footerVersion.Position = UDim2.new(0.5, -40, 0, 0)
+footerVersion.BackgroundTransparency = 1
+footerVersion.Font = Enum.Font.GothamBold
+footerVersion.Text = "v3.0.0"
+footerVersion.TextColor3 = Colors.BluePrimary
+footerVersion.TextSize = 10
+footerVersion.TextXAlignment = Enum.TextXAlignment.Center
+footerVersion.ZIndex = 3
+footerVersion.Parent = footerBar
+
+-- Helper Functions for UI Elements --
+local function createCategoryHeader(parent, text)
+    local hdr = Instance.new("Frame")
+    hdr.Size = UDim2.new(1, 0, 0, 24)
+    hdr.BackgroundTransparency = 1
+    hdr.Parent = parent
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.Font = Enum.Font.GothamBold
+    lbl.Text = string.upper(text)
+    lbl.TextColor3 = Colors.BluePrimary
+    lbl.TextSize = 11
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = hdr
+    return hdr
+end
+
+local function createCardGroup(parent)
+    local group = Instance.new("Frame")
+    group.Size = UDim2.new(1, 0, 0, 0)
+    group.AutomaticSize = Enum.AutomaticSize.Y
+    group.BackgroundColor3 = Colors.RowNormal
+    group.BorderSizePixel = 0
+    group.Parent = parent
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Colors.BorderSubtle
+    stroke.Thickness = 1
+    stroke.Parent = group
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = group
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 0)
+    layout.Parent = group
+
+    return group
+end
+
+local function createBaseRow(parent, labelText, descText, indexSearch)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.BackgroundColor3 = Colors.RowNormal
+    row.BorderSizePixel = 0
+    row.Parent = parent
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.Parent = row
+
+    local textFrame = Instance.new("Frame")
+    textFrame.Size = UDim2.new(1, -200, 1, 0)
+    textFrame.BackgroundTransparency = 1
+    textFrame.Parent = row
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, 0, 0, 18)
+    titleLbl.Position = UDim2.new(0, 0, 0, 4)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.Text = labelText
+    titleLbl.TextColor3 = Colors.TextWhite
+    titleLbl.TextSize = 12
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Parent = textFrame
+
+    local descLbl = Instance.new("TextLabel")
+    descLbl.Size = UDim2.new(1, 0, 0, 14)
+    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.BackgroundTransparency = 1
+    descLbl.Font = Enum.Font.Gotham
+    descLbl.Text = descText or ""
+    descLbl.TextColor3 = Colors.TextMuted
+    descLbl.TextSize = 10
+    descLbl.TextXAlignment = Enum.TextXAlignment.Left
+    descLbl.Parent = textFrame
+
+    row.MouseEnter:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
+    end)
+    row.MouseLeave:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
+    end)
+
+    if indexSearch ~= false then
+        table.insert(rowSearchIndex, {
+            frame = row,
+            query = (labelText .. " " .. (descText or "")):lower()
+        })
+    end
+
+    return row
+end
+
+local function createToggleRow(parent, labelText, descText, initialVal, callback, indexSearch)
+    local row = createBaseRow(parent, labelText, descText, indexSearch)
+    local state = initialVal or false
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 42, 0, 22)
+    btn.Position = UDim2.new(1, -42, 0.5, -11)
+    btn.BackgroundColor3 = state and Colors.BluePrimary or Colors.ControlBg
+    btn.Text = ""
+    btn.BorderSizePixel = 0
+    btn.Parent = row
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(1, 0)
+    btnCorner.Parent = btn
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+    knob.BackgroundColor3 = Colors.TextWhite
+    knob.BorderSizePixel = 0
+    knob.Parent = btn
+
+    local knobCorner = Instance.new("UICorner")
+    knobCorner.CornerRadius = UDim.new(1, 0)
+    knobCorner.Parent = knob
+
+    -- Pulse animation for active state
+    local pulseAnimation
+    local function updateVisuals()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundColor3 = state and Colors.BluePrimary or Colors.ControlBg
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.2), {
+            Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
+        }):Play()
+        
+        if pulseAnimation then
+            pulseAnimation:Cancel()
+            pulseAnimation = nil
+        end
+        
+        if state then
+            pulseAnimation = TweenService:Create(btn, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+                BackgroundTransparency = 0.3
+            })
+            pulseAnimation:Play()
+        end
+    end
+
+    btn.MouseButton1Click:Connect(function()
+        state = not state
+        updateVisuals()
+        if callback then callback(state) end
+        AutoSaveConfig()
+    end)
+
+    return {
+        frame = row,
+        SetState = function(val)
+            state = val
+            updateVisuals()
+        end
+    }
+end
+
+local function createSliderRow(parent, labelText, descText, minVal, maxVal, initialVal, isFloat, suffix, callback,
+                               indexSearch)
+    local row = createBaseRow(parent, labelText, descText, indexSearch)
+    local currentVal = initialVal or minVal
+    suffix = suffix or ""
+
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(0, 190, 0, 26)
+    container.Position = UDim2.new(1, -190, 0.5, -13)
+    container.BackgroundTransparency = 1
+    container.Parent = row
+
+    local valLabel = Instance.new("TextLabel")
+    valLabel.Size = UDim2.new(0, 72, 1, 0)
+    valLabel.Position = UDim2.new(1, -72, 0, 0)
+    valLabel.BackgroundTransparency = 1
+    valLabel.Font = Enum.Font.GothamBold
+    valLabel.Text = isFloat and string.format("%.2f", currentVal) .. suffix or tostring(math.floor(currentVal)) .. suffix
+    valLabel.TextColor3 = Colors.BluePrimary
+    valLabel.TextSize = 11
+    valLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valLabel.Parent = container
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(1, -78, 0, 6)
+    track.Position = UDim2.new(0, 0, 0.5, -3)
+    track.BackgroundColor3 = Colors.ControlBg
+    track.BorderSizePixel = 0
+    track.Parent = container
+
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(1, 0)
+    trackCorner.Parent = track
+
+    local fill = Instance.new("Frame")
+    local pct = math.clamp((currentVal - minVal) / (maxVal - minVal), 0, 1)
+    fill.Size = UDim2.new(pct, 0, 1, 0)
+    fill.BackgroundColor3 = Colors.BluePrimary
+    fill.BorderSizePixel = 0
+    fill.Parent = track
+
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(1, 0)
+    fillCorner.Parent = fill
+
+    local sliding = false
+    local function updateValueFromX(x)
+        local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = minVal + (maxVal - minVal) * rel
+        if not isFloat then val = math.floor(val + 0.5) end
+        currentVal = val
+        fill.Size = UDim2.new(rel, 0, 1, 0)
+        valLabel.Text = isFloat and string.format("%.2f", val) .. suffix or tostring(val) .. suffix
+        AutoSaveConfig()
+        if callback then callback(val) end
+    end
+
+    track.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = true
+            updateValueFromX(input.Position.X)
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            sliding = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if sliding and input.UserInputType == Enum.UserInputType.MouseMovement then
+            updateValueFromX(input.Position.X)
+        end
+    end)
+
+    return {
+        frame = row,
+        SetValue = function(val)
+            currentVal = val
+            local p = math.clamp((val - minVal) / (maxVal - minVal), 0, 1)
+            fill.Size = UDim2.new(p, 0, 1, 0)
+            valLabel.Text = isFloat and string.format("%.2f", val) .. suffix or tostring(math.floor(val)) .. suffix
+        end
+    }
+end
+
+local function createDropdownRow(parent, labelText, descText, options, initialVal, callback, indexSearch)
+    local selected = initialVal or options[1]
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.AutomaticSize = Enum.AutomaticSize.Y
+    row.BackgroundColor3 = Colors.RowNormal
+    row.BorderSizePixel = 0
+    row.ClipsDescendants = true
+    row.Parent = parent
+
+    local rowLayout = Instance.new("UIListLayout")
+    rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rowLayout.Padding = UDim.new(0, 4)
+    rowLayout.Parent = row
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 44)
+    header.BackgroundTransparency = 1
+    header.Parent = row
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.Parent = header
+
+    local textFrame = Instance.new("Frame")
+    textFrame.Size = UDim2.new(1, -155, 1, 0)
+    textFrame.BackgroundTransparency = 1
+    textFrame.Parent = header
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, 0, 0, 18)
+    titleLbl.Position = UDim2.new(0, 0, 0, 4)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.Text = labelText
+    titleLbl.TextColor3 = Colors.TextWhite
+    titleLbl.TextSize = 12
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Parent = textFrame
+
+    local descLbl = Instance.new("TextLabel")
+    descLbl.Size = UDim2.new(1, 0, 0, 14)
+    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.BackgroundTransparency = 1
+    descLbl.Font = Enum.Font.Gotham
+    descLbl.Text = descText or ""
+    descLbl.TextColor3 = Colors.TextMuted
+    descLbl.TextSize = 10
+    descLbl.TextXAlignment = Enum.TextXAlignment.Left
+    descLbl.Parent = textFrame
+
+    local ddBtn = Instance.new("TextButton")
+    ddBtn.Size = UDim2.new(0, 140, 0, 26)
+    ddBtn.Position = UDim2.new(1, -140, 0.5, -13)
+    ddBtn.BackgroundColor3 = Colors.ControlBg
+    ddBtn.Font = Enum.Font.GothamBold
+    ddBtn.Text = tostring(selected) .. "  ▾"
+    ddBtn.TextColor3 = Colors.BluePrimary
+    ddBtn.TextSize = 11
+    ddBtn.BorderSizePixel = 0
+    ddBtn.Parent = header
+
+    local ddCorner = Instance.new("UICorner")
+    ddCorner.CornerRadius = UDim.new(0, 4)
+    ddCorner.Parent = ddBtn
+
+    local optionsContainer = Instance.new("Frame")
+    optionsContainer.Size = UDim2.new(1, 0, 0, 0)
+    optionsContainer.AutomaticSize = Enum.AutomaticSize.Y
+    optionsContainer.BackgroundTransparency = 1
+    optionsContainer.Visible = false
+    optionsContainer.Parent = row
+
+    local optPad = Instance.new("UIPadding")
+    optPad.PaddingLeft = UDim.new(0, 12)
+    optPad.PaddingRight = UDim.new(0, 12)
+    optPad.PaddingBottom = UDim.new(0, 8)
+    optPad.Parent = optionsContainer
+
+    local optList = Instance.new("UIListLayout")
+    optList.SortOrder = Enum.SortOrder.LayoutOrder
+    optList.Padding = UDim.new(0, 3)
+    optList.Parent = optionsContainer
+
+    local optButtons = {}
+    for _, opt in ipairs(options) do
+        local optBtn = Instance.new("TextButton")
+        optBtn.Size = UDim2.new(1, 0, 0, 28)
+        optBtn.BackgroundColor3 = (opt == selected) and Colors.DropdownSelected or Colors.InputBg
+        optBtn.Font = Enum.Font.Gotham
+        optBtn.Text = (opt == selected and "✓ " or "   ") .. tostring(opt)
+        optBtn.TextColor3 = (opt == selected) and Colors.BluePrimary or Colors.TextWhite
+        optBtn.TextSize = 11
+        optBtn.TextXAlignment = Enum.TextXAlignment.Left
+        optBtn.BorderSizePixel = 0
+        optBtn.Parent = optionsContainer
+
+        local oCorner = Instance.new("UICorner")
+        oCorner.CornerRadius = UDim.new(0, 4)
+        oCorner.Parent = optBtn
+
+        local oPad = Instance.new("UIPadding")
+        oPad.PaddingLeft = UDim.new(0, 10)
+        oPad.Parent = optBtn
+
+        optButtons[opt] = optBtn
+
+        optBtn.MouseEnter:Connect(function()
+            if opt ~= selected then
+                TweenService:Create(optBtn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
+            end
+        end)
+        optBtn.MouseLeave:Connect(function()
+            if opt ~= selected then
+                TweenService:Create(optBtn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.InputBg }):Play()
+            end
+        end)
+
+        optBtn.MouseButton1Click:Connect(function()
+            selected = opt
+            ddBtn.Text = tostring(opt) .. "  ▾"
+            optionsContainer.Visible = false
+            for oName, b in pairs(optButtons) do
+                b.BackgroundColor3 = (oName == opt) and Colors.DropdownSelected or Colors.InputBg
+                b.TextColor3 = (oName == opt) and Colors.BluePrimary or Colors.TextWhite
+                b.Text = (oName == opt and "✓ " or "   ") .. tostring(oName)
+            end
+            AutoSaveConfig()
+            if callback then callback(opt) end
+        end)
+    end
+
+    ddBtn.MouseButton1Click:Connect(function()
+        optionsContainer.Visible = not optionsContainer.Visible
+        ddBtn.Text = tostring(selected) .. (optionsContainer.Visible and "  ▴" or "  ▾")
+    end)
+
+    header.MouseEnter:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
+    end)
+    header.MouseLeave:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
+    end)
+
+    if indexSearch ~= false then
+        table.insert(rowSearchIndex, {
+            frame = row,
+            query = (labelText .. " " .. (descText or "")):lower()
+        })
+    end
+
+    return {
+        frame = row,
+        SetSelected = function(opt)
+            selected = opt
+            ddBtn.Text = tostring(opt) .. "  ▾"
+            for oName, b in pairs(optButtons) do
+                b.BackgroundColor3 = (oName == opt) and Colors.DropdownSelected or Colors.InputBg
+                b.TextColor3 = (oName == opt) and Colors.BluePrimary or Colors.TextWhite
+                b.Text = (oName == opt and "✓ " or "   ") .. tostring(oName)
+            end
+        end
+    }
+end
+
+local function createSearchDropdownRow(parent, labelText, descText, options, initialVal, callback, indexSearch)
+    local selected = initialVal or options[1] or ""
+
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, 44)
+    row.AutomaticSize = Enum.AutomaticSize.Y
+    row.BackgroundColor3 = Colors.RowNormal
+    row.BorderSizePixel = 0
+    row.ClipsDescendants = true
+    row.Parent = parent
+
+    local rowLayout = Instance.new("UIListLayout")
+    rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    rowLayout.Padding = UDim.new(0, 4)
+    rowLayout.Parent = row
+
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1, 0, 0, 44)
+    header.BackgroundTransparency = 1
+    header.Parent = row
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 12)
+    pad.PaddingRight = UDim.new(0, 12)
+    pad.Parent = header
+
+    local textFrame = Instance.new("Frame")
+    textFrame.Size = UDim2.new(1, -180, 1, 0)
+    textFrame.BackgroundTransparency = 1
+    textFrame.Parent = header
+
+    local titleLbl = Instance.new("TextLabel")
+    titleLbl.Size = UDim2.new(1, 0, 0, 18)
+    titleLbl.Position = UDim2.new(0, 0, 0, 4)
+    titleLbl.BackgroundTransparency = 1
+    titleLbl.Font = Enum.Font.GothamBold
+    titleLbl.Text = labelText
+    titleLbl.TextColor3 = Colors.TextWhite
+    titleLbl.TextSize = 12
+    titleLbl.TextXAlignment = Enum.TextXAlignment.Left
+    titleLbl.Parent = textFrame
+
+    local descLbl = Instance.new("TextLabel")
+    descLbl.Size = UDim2.new(1, 0, 0, 14)
+    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.BackgroundTransparency = 1
+    descLbl.Font = Enum.Font.Gotham
+    descLbl.Text = descText or ""
+    descLbl.TextColor3 = Colors.TextMuted
+    descLbl.TextSize = 10
+    descLbl.TextXAlignment = Enum.TextXAlignment.Left
+    descLbl.Parent = textFrame
+
+    local searchContainer = Instance.new("Frame")
+    searchContainer.Size = UDim2.new(0, 165, 0, 28)
+    searchContainer.Position = UDim2.new(1, -165, 0.5, -14)
+    searchContainer.BackgroundColor3 = Colors.ControlBg
+    searchContainer.BorderSizePixel = 0
+    searchContainer.Parent = header
+
+    local scCorner = Instance.new("UICorner")
+    scCorner.CornerRadius = UDim.new(0, 4)
+    scCorner.Parent = searchContainer
+
+    local scStroke = Instance.new("UIStroke")
+    scStroke.Color = Colors.BorderSubtle
+    scStroke.Thickness = 1
+    scStroke.Parent = searchContainer
+
+    local searchBox = Instance.new("TextBox")
+    searchBox.Size = UDim2.new(1, -28, 1, 0)
+    searchBox.Position = UDim2.new(0, 8, 0, 0)
+    searchBox.BackgroundTransparency = 1
+    searchBox.Font = Enum.Font.GothamBold
+    searchBox.PlaceholderText = "Search recipe..."
+    searchBox.PlaceholderColor3 = Colors.TextMuted
+    searchBox.Text = tostring(selected)
+    searchBox.TextColor3 = Colors.BluePrimary
+    searchBox.TextSize = 11
+    searchBox.TextXAlignment = Enum.TextXAlignment.Left
+    searchBox.ClearTextOnFocus = false
+    searchBox.Parent = searchContainer
+
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 22, 1, 0)
+    toggleBtn.Position = UDim2.new(1, -24, 0, 0)
+    toggleBtn.BackgroundTransparency = 1
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.Text = "▾"
+    toggleBtn.TextColor3 = Colors.BluePrimary
+    toggleBtn.TextSize = 10
+    toggleBtn.Parent = searchContainer
+
+    local scrollContainer = Instance.new("ScrollingFrame")
+    scrollContainer.Size = UDim2.new(1, -20, 0, 170)
+    scrollContainer.Position = UDim2.new(0, 10, 0, 0)
+    scrollContainer.BackgroundColor3 = Colors.InputBg
+    scrollContainer.BorderSizePixel = 0
+    scrollContainer.ScrollBarThickness = 3
+    scrollContainer.ScrollBarImageColor3 = Colors.BluePrimary
+    scrollContainer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    scrollContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollContainer.Visible = false
+    scrollContainer.Parent = row
+
+    local sCorner = Instance.new("UICorner")
+    sCorner.CornerRadius = UDim.new(0, 4)
+    sCorner.Parent = scrollContainer
+
+    local sPad = Instance.new("UIPadding")
+    sPad.PaddingTop = UDim.new(0, 4)
+    sPad.PaddingBottom = UDim.new(0, 4)
+    sPad.PaddingLeft = UDim.new(0, 4)
+    sPad.PaddingRight = UDim.new(0, 4)
+    sPad.Parent = scrollContainer
+
+    local sList = Instance.new("UIListLayout")
+    sList.SortOrder = Enum.SortOrder.LayoutOrder
+    sList.Padding = UDim.new(0, 2)
+    sList.Parent = scrollContainer
+
+    local function populateOptions(filterQuery)
+        for _, child in ipairs(scrollContainer:GetChildren()) do
+            if child:IsA("TextButton") or child:IsA("TextLabel") then
+                child:Destroy()
+            end
+        end
+
+        local q = (filterQuery or ""):lower():gsub("^%s*(.-)%s*$", "%1")
+        local count = 0
+
+        for _, opt in ipairs(options) do
+            local optName = tostring(opt)
+            if q == "" or optName:lower():find(q, 1, true) then
+                count = count + 1
+                local btn = Instance.new("TextButton")
+                btn.Size = UDim2.new(1, 0, 0, 26)
+                btn.BackgroundColor3 = (optName == selected) and Colors.DropdownSelected or Colors.RowNormal
+                btn.BorderSizePixel = 0
+                btn.Font = Enum.Font.Gotham
+                btn.Text = (optName == selected and "✓ " or "  ") .. optName
+                btn.TextColor3 = (optName == selected) and Colors.BluePrimary or Colors.TextWhite
+                btn.TextSize = 11
+                btn.TextXAlignment = Enum.TextXAlignment.Left
+                btn.Parent = scrollContainer
+
+                local bCorner = Instance.new("UICorner")
+                bCorner.CornerRadius = UDim.new(0, 3)
+                bCorner.Parent = btn
+
+                local bPad = Instance.new("UIPadding")
+                bPad.PaddingLeft = UDim.new(0, 8)
+                bPad.Parent = btn
+
+                btn.MouseEnter:Connect(function()
+                    if optName ~= selected then
+                        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Colors.RowHover }):Play()
+                    end
+                end)
+                btn.MouseLeave:Connect(function()
+                    if optName ~= selected then
+                        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Colors.RowNormal }):Play()
+                    end
+                end)
+
+                btn.MouseButton1Click:Connect(function()
+                    selected = optName
+                    searchBox.Text = optName
+                    scrollContainer.Visible = false
+                    toggleBtn.Text = "▾"
+                    AutoSaveConfig()
+                    if callback then callback(optName) end
+                end)
+            end
+        end
+
+        if count == 0 then
+            local emptyLbl = Instance.new("TextLabel")
+            emptyLbl.Size = UDim2.new(1, 0, 0, 26)
+            emptyLbl.BackgroundTransparency = 1
+            emptyLbl.Font = Enum.Font.Gotham
+            emptyLbl.Text = "No matching recipe found"
+            emptyLbl.TextColor3 = Colors.TextMuted
+            emptyLbl.TextSize = 10
+            emptyLbl.Parent = scrollContainer
+        end
+    end
+
+    searchBox.Focused:Connect(function()
+        scrollContainer.Visible = true
+        toggleBtn.Text = "▴"
+        populateOptions(searchBox.Text)
+        TweenService:Create(scStroke, TweenInfo.new(0.2), { Color = Colors.BluePrimary }):Play()
+    end)
+
+    searchBox.FocusLost:Connect(function()
+        TweenService:Create(scStroke, TweenInfo.new(0.2), { Color = Colors.BorderSubtle }):Play()
+        local text = searchBox.Text:gsub("^%s*(.-)%s*$", "%1")
+        if text ~= "" then
+            local found = nil
+            for _, opt in ipairs(options) do
+                if opt:lower() == text:lower() then
+                    found = opt
+                    break
+                end
+            end
+            selected = found or text
+            searchBox.Text = selected
+            AutoSaveConfig()
+            if callback then callback(selected) end
+        end
+        task.delay(0.2, function()
+            if not searchBox:IsFocused() then
+                scrollContainer.Visible = false
+                toggleBtn.Text = "▾"
+            end
+        end)
+    end)
+
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        if scrollContainer.Visible then
+            populateOptions(searchBox.Text)
+        end
+    end)
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        scrollContainer.Visible = not scrollContainer.Visible
+        toggleBtn.Text = scrollContainer.Visible and "▴" or "▾"
+        if scrollContainer.Visible then
+            populateOptions(searchBox.Text)
+        end
+    end)
+
+    header.MouseEnter:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
+    end)
+    header.MouseLeave:Connect(function()
+        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
+    end)
+
+    if indexSearch ~= false then
+        table.insert(rowSearchIndex, {
+            frame = row,
+            query = (labelText .. " " .. (descText or "")):lower()
+        })
+    end
+
+    return {
+        frame = row,
+        SetValue = function(val)
+            selected = val
+            searchBox.Text = tostring(val)
+        end,
+        SetSelected = function(val)
+            selected = val
+            searchBox.Text = tostring(val)
+        end
+    }
+end
+
+local function createInfoRow(parent, labelText, valueText, indexSearch)
+    local row = createBaseRow(parent, labelText, "", indexSearch)
+    local valLbl = Instance.new("TextLabel")
+    valLbl.Size = UDim2.new(0, 150, 1, 0)
+    valLbl.Position = UDim2.new(1, -150, 0, 0)
+    valLbl.BackgroundTransparency = 1
+    valLbl.Font = Enum.Font.GothamBold
+    valLbl.Text = valueText
+    valLbl.TextColor3 = Colors.BluePrimary
+    valLbl.TextSize = 11
+    valLbl.TextXAlignment = Enum.TextXAlignment.Right
+    valLbl.Parent = row
+
+    return {
+        frame = row,
+        SetValue = function(newVal)
+            valLbl.Text = newVal
+        end
+    }
+end
+
+local function createButtonRow(parent, labelText, btnText, descText, callback, indexSearch)
+    local row = createBaseRow(parent, labelText, descText, indexSearch)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 100, 0, 26)
+    btn.Position = UDim2.new(1, -100, 0.5, -13)
+    btn.BackgroundColor3 = Colors.ControlBg
+    btn.Font = Enum.Font.GothamBold
+    btn.Text = btnText
+    btn.TextColor3 = Colors.BluePrimary
+    btn.TextSize = 11
+    btn.BorderSizePixel = 0
+    btn.Parent = row
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 4)
+    btnCorner.Parent = btn
+
+    local btnStroke = Instance.new("UIStroke")
+    btnStroke.Color = Colors.BluePrimary
+    btnStroke.Thickness = 1
+    btnStroke.Parent = btn
+
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15),
+            { BackgroundColor3 = Colors.BlueDark, TextColor3 = Colors.TextWhite }):Play()
+        TweenService:Create(btnStroke, TweenInfo.new(0.15),
+            { Color = Colors.BlueGlow, Thickness = 2 }):Play()
+    end)
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.15),
+            { BackgroundColor3 = Colors.ControlBg, TextColor3 = Colors.BluePrimary }):Play()
+        TweenService:Create(btnStroke, TweenInfo.new(0.15),
+            { Color = Colors.BluePrimary, Thickness = 1 }):Play()
+    end)
+
+    btn.MouseButton1Click:Connect(callback)
+    return row
+end
+
+-- HOME TAB --
+createCategoryHeader(tabs.Home, "📊 System Status")
+local homeStatusCard = createCardGroup(tabs.Home)
+local runStatusRow = createInfoRow(homeStatusCard, "Status", "⚡ Identical Ready", true)
+createInfoRow(homeStatusCard, "Target Game", "🎮 Booga Booga", true)
+createInfoRow(homeStatusCard, "Active Version", "v3.0", true)
+
+createCategoryHeader(tabs.Home, "🚨 Emergency & Controls")
+local homeEmergencyCard = createCardGroup(tabs.Home)
+
+local function EmergencyStop()
+    Config.CombatAura = false
+    Config.ResourceAura = false
+    Config.CritterAura = false
+    Config.AutoFarm = false
+    Config.AutoPickup = false
+    Config.AutoChest = false
+    Config.AutoCraft = false
+    Config.AutoPlant = false
+    Config.AutoProcess = false
+    Config.ThreatProtection = false
+    Config.BowAimbot = false
+    Config.AutoFishing = false
+
+    for name, c in pairs(ctrls) do
+        if c.SetState and Config[name] ~= nil then
+            c.SetState(false)
+        end
+    end
+
+    runStatusRow.SetValue("⚠️ HALTED (Emergency Stop)")
+    SendNotification("Identical", "EMERGENCY STOP: All active features halted.", 3, "🚨")
+end
+
+createButtonRow(homeEmergencyCard, "Stop All Features", "STOP ALL", "Instantly disables all auras, farming & loops",
+    EmergencyStop, true)
+
+createCategoryHeader(tabs.Home, "💾 Configuration & Profiles")
+local homeConfigCard = createCardGroup(tabs.Home)
+createButtonRow(homeConfigCard, "Save Configuration", "SAVE NOW", "Force write all current settings to default.json",
+    function()
+        AutoSaveConfig()
+        SendNotification("Identical", "Configuration saved to disk.", 2, "💾")
+    end, true)
+
+local SyncUIWithConfig
+
+createButtonRow(homeConfigCard, "Load Configuration", "LOAD NOW", "Reload settings from default.json", function()
+    if LoadSavedConfig() then
+        if SyncUIWithConfig then SyncUIWithConfig() end
+        SendNotification("Identical", "Configuration restored.", 2, "📂")
+    end
+end, true)
+
+createButtonRow(homeConfigCard, "Export Settings", "EXPORT", "Copies JSON configuration string to clipboard", function()
+    local ok, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
+    if ok and encoded and setclipboard then
+        setclipboard(encoded)
+        SendNotification("Identical", "Config copied to clipboard.", 2, "📋")
+    end
+end, true)
+
+createButtonRow(homeConfigCard, "Import Settings", "IMPORT", "Loads JSON configuration string from clipboard", function()
+    if getclipboard then
+        local raw = getclipboard()
+        local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
+        if ok and type(data) == "table" then
+            for k, v in pairs(data) do
+                if Config[k] ~= nil then Config[k] = v end
+            end
+            if SyncUIWithConfig then SyncUIWithConfig() end
+            AutoSaveConfig()
+            SendNotification("Identical", "Imported configuration successfully.", 2, "📥")
+        else
+            SendNotification("Identical", "Failed to parse clipboard config.", 2, "❌")
+        end
+    end
+end, true)
+
+-- Unload System --
+local origHitboxSizes = {}
+local function resetHitboxes()
+    local playersFolder = Workspace:FindFirstChild("Players")
+    if playersFolder then
+        for _, pChar in ipairs(playersFolder:GetChildren()) do
+            local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+            if pRoot and origHitboxSizes[pRoot] then
+                pRoot.Size = origHitboxSizes[pRoot]
+                pRoot.Transparency = 1
+                pRoot.CanCollide = false
+            end
+        end
+    end
+end
+
+local function UnloadScript()
+    for _, conn in ipairs(activeConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(activeConnections)
+
+    for _, bb in pairs(espStorage) do
+        pcall(function() bb:Destroy() end)
+    end
+    table.clear(espStorage)
+    if espFolder then
+        pcall(function() espFolder:ClearAllChildren() end)
+    end
+
+    pcall(function()
+        Lighting.Ambient = origLighting.Ambient
+        Lighting.OutdoorAmbient = origLighting.OutdoorAmbient
+        Lighting.Brightness = origLighting.Brightness
+        Lighting.FogEnd = origLighting.FogEnd
+        local a = Lighting:FindFirstChildOfClass("Atmosphere")
+        if a then a.Density = origAtmosphereDensity end
+    end)
+
+    pcall(function()
+        local char = LocalPlayer.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end
+        resetHitboxes()
+    end)
+
+    pcall(function() screenGui:Destroy() end)
+    if getgenv then getgenv().IdenticalBoogaUnload = nil end
+end
+
+createButtonRow(homeConfigCard, "Unload Identical", "UNLOAD", "Completely unload and restore game state", UnloadScript,
+    true)
+
+-- Teleport System --
+local function QueueScriptForTeleport()
+    local qot = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+    if qot then
+        pcall(function()
+            local queued = false
+            if isfile and isfile("Identical_Booga_v3.lua") then
+                qot([[
+                    repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
+                    task.wait(0.5)
+                    if isfile and isfile("Identical_Booga_v3.lua") then
+                        loadfile("Identical_Booga_v3.lua")()
+                    end
+                ]])
+                queued = true
+            elseif isfile and isfile("identical_boogabooga_v3.lua") then
+                qot([[
+                    repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
+                    task.wait(0.5)
+                    if isfile and isfile("identical_boogabooga_v3.lua") then
+                        loadfile("identical_boogabooga_v3.lua")()
+                    end
+                ]])
+                queued = true
+            end
+
+            if not queued and getgenv and getgenv().IdenticalScriptSource then
+                qot(getgenv().IdenticalScriptSource)
+            end
+        end)
+    end
+end
+
+local function ServerHop()
+    QueueScriptForTeleport()
+    SendNotification("Identical", "Searching for available public servers...", 2, "🌐")
+
+    local TeleportService = game:GetService("TeleportService")
+    local placeId = game.PlaceId
+    local jobId = game.JobId
+    local url = "https://games.roblox.com/v1/games/" .. tostring(placeId) .. "/servers/Public?sortOrder=Desc&limit=100"
+
+    local ok, res = pcall(function()
+        if request then
+            local r = request({ Url = url, Method = "GET" })
+            return r.Body
+        elseif http_request then
+            local r = http_request({ Url = url, Method = "GET" })
+            return r.Body
+        else
+            return game:HttpGet(url)
+        end
+    end)
+
+    if ok and res then
+        local dataOk, data = pcall(function() return HttpService:JSONDecode(res) end)
+        if dataOk and data and data.data then
+            local candidates = {}
+            for _, s in ipairs(data.data) do
+                if type(s) == "table" and s.id and s.id ~= jobId and (s.playing or 0) < (s.maxPlayers or 40) and (s.playing or 0) > 0 then
+                    table.insert(candidates, s.id)
+                end
+            end
+
+            if #candidates > 0 then
+                local chosen = candidates[math.random(1, #candidates)]
+                SendNotification("Identical", "Server found! Teleporting...", 3, "🚀")
+                pcall(function()
+                    TeleportService:TeleportToPlaceInstance(placeId, chosen, LocalPlayer)
+                end)
+                return
+            end
+        end
+    end
+
+    SendNotification("Identical", "Connecting to next available server...", 2, "🌐")
+    pcall(function()
+        TeleportService:Teleport(placeId, LocalPlayer)
+    end)
+end
+
+local function RejoinServer()
+    QueueScriptForTeleport()
+    SendNotification("Identical", "Rejoining current server...", 2, "🔄")
+    local TeleportService = game:GetService("TeleportService")
+    pcall(function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end)
+end
+
+-- Craftable Recipes --
+local allCraftableRecipes = {}
+pcall(function()
+    local ItemData = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("ItemData") and
+        require(RS.Modules.ItemData)
+    if ItemData then
+        for name, v in pairs(ItemData) do
+            if type(v) == "table" and v.recipe then
+                table.insert(allCraftableRecipes, name)
+            end
+        end
+    end
+end)
+table.sort(allCraftableRecipes)
+if #allCraftableRecipes == 0 then
+    allCraftableRecipes = { "Campfire", "Chest", "Plant Box", "Stone Pick", "Stone Axe", "Wooden Wall", "Wooden Door",
+        "Adurite Axe", "Adurite Pick", "Iron Axe", "Iron Pick", "Steel Axe", "Steel Pick", "Gold Axe", "Gold Pick",
+        "Arrow", "Bow" }
+end
+
+createCategoryHeader(tabs.Home, "🌍 Server & Session")
+local homeServerCard = createCardGroup(tabs.Home)
+createButtonRow(homeServerCard, "Server Hop", "HOP NOW", "Teleport to a new public server & re-inject", ServerHop, true)
+createButtonRow(homeServerCard, "Rejoin Server", "REJOIN", "Rejoin the current server & re-inject", RejoinServer, true)
+
+-- COMBAT TAB --
+createCategoryHeader(tabs.Combat, "⚔️ Combat Reach & Aura")
+local combatCard = createCardGroup(tabs.Combat)
+ctrls.CombatReach = createToggleRow(combatCard, "Combat Reach", "Expands player reach and hitboxes", Config.CombatReach,
+    function(v)
+        Config.CombatReach = v
+        if not v then resetHitboxes() end
+    end, true)
+ctrls.CombatAura = createToggleRow(combatCard, "Combat Aura", "Auto attacks enemy players in range", Config.CombatAura,
+    function(v)
+        Config.CombatAura = v
+        runStatusRow.SetValue(v and "⚔️ Combat Aura: ACTIVE" or "⚡ Identical Ready")
+    end, true)
+ctrls.CombatRange = createSliderRow(combatCard, "Reach Distance", "Maximum reach & aura radius", 5, 50,
+    Config.CombatRange, false, " studs", function(v)
+        Config.CombatRange = v
+    end, true)
+ctrls.CombatInterval = createSliderRow(combatCard, "Attack Interval", "Time between aura attacks", 0.1, 1.0,
+    Config.CombatInterval, true, "s", function(v)
+        Config.CombatInterval = v
+    end, true)
+ctrls.CombatIgnoreTribe = createToggleRow(combatCard, "Ignore Tribe", "Do not target tribe members",
+    Config.CombatIgnoreTribe, function(v)
+        Config.CombatIgnoreTribe = v
+    end, true)
+ctrls.TargetPriority = createDropdownRow(combatCard, "Target Priority", "Priority method for combat targets",
+    { "Closest", "Lowest HP" }, Config.TargetPriority, function(v)
+        Config.TargetPriority = v
+    end, true)
+ctrls.LineOfSight = createToggleRow(combatCard, "Line of Sight", "Only target visible entities behind no walls",
+    Config.LineOfSight, function(v)
+        Config.LineOfSight = v
+    end, true)
+ctrls.HumanizedPacing = createToggleRow(combatCard, "Humanized Pacing", "Adds natural delay variance to attack timings",
+    Config.HumanizedPacing, function(v)
+        Config.HumanizedPacing = v
+    end, true)
+ctrls.MicroBreaks = createToggleRow(combatCard, "Micro Breaks", "Brief periodic pauses for undetectable actions",
+    Config.MicroBreaks, function(v)
+        Config.MicroBreaks = v
+    end, true)
+ctrls.AutoDodge = createToggleRow(combatCard, "Auto Dodge", "Automatically dodge incoming attacks", Config.AutoDodge,
+    function(v)
+        Config.AutoDodge = v
+    end, true)
+ctrls.DodgeThreshold = createSliderRow(combatCard, "Dodge Sensitivity", "Threat detection distance for dodge", 8, 30,
+    Config.DodgeThreshold, false, " studs", function(v)
+        Config.DodgeThreshold = v
+    end, true)
+
+createCategoryHeader(tabs.Combat, "🏹 Bow & Ranged Aimbot")
+local aimbotCard = createCardGroup(tabs.Combat)
+ctrls.BowAimbot = createToggleRow(aimbotCard, "Bow Aimbot", "Locks aim onto target with drop compensation",
+    Config.BowAimbot, function(v)
+        Config.BowAimbot = v
+    end, true)
+ctrls.AimbotTarget = createDropdownRow(aimbotCard, "Target Mode", "Target entity type", { "Players", "Critters", "Both" },
+    Config.AimbotTarget, function(v)
+        Config.AimbotTarget = v
+    end, true)
+ctrls.AimbotPart = createDropdownRow(aimbotCard, "Target Hitbox", "Body part to lock onto", { "Head", "Torso" },
+    Config.AimbotPart, function(v)
+        Config.AimbotPart = v
+    end, true)
+ctrls.AimbotRange = createSliderRow(aimbotCard, "Aimbot Range", "Maximum search range for targets", 30, 400,
+    Config.AimbotRange, false, " studs", function(v)
+        Config.AimbotRange = v
+    end, true)
+ctrls.AimbotSmoothness = createSliderRow(aimbotCard, "Smoothness", "0 = Instant Snap, Higher = Smooth", 0, 9,
+    Config.AimbotSmoothness, false, "", function(v)
+        Config.AimbotSmoothness = v
+    end, true)
+ctrls.AimbotPrediction = createToggleRow(aimbotCard, "Advanced Prediction", "Predicts target movement with velocity tracking",
+    Config.AimbotPrediction, function(v)
+        Config.AimbotPrediction = v
+    end, true)
+ctrls.AimbotWallCheck = createToggleRow(aimbotCard, "Wall Check", "Only target enemies behind no walls",
+    Config.AimbotWallCheck, function(v)
+        Config.AimbotWallCheck = v
+    end, true)
+
+createCategoryHeader(tabs.Combat, "💊 Survival, Heal & Threat Retreat")
+local healCard = createCardGroup(tabs.Combat)
+ctrls.AutoHeal = createToggleRow(healCard, "Auto Heal", "Automatically consumes food when health drops", Config.AutoHeal,
+    function(v)
+        Config.AutoHeal = v
+    end, true)
+ctrls.HealThreshold = createSliderRow(healCard, "Health Threshold", "Trigger heal below this health %", 10, 90,
+    Config.HealThreshold, false, "%", function(v)
+        Config.HealThreshold = v
+    end, true)
+ctrls.HealFood = createDropdownRow(healCard, "Food Preference", "Item name to consume from bag",
+    { "Cooked Meat", "Raw Meat", "Berries", "Mushroom", "Apple", "Bloodfruit", "Sunfruit" }, Config.HealFood, function(v)
+        Config.HealFood = v
+    end, true)
+ctrls.ThreatProtection = createToggleRow(healCard, "Threat Retreat",
+    "Automatically navigates away from enemies at low HP", Config.ThreatProtection, function(v)
+        Config.ThreatProtection = v
+    end, true)
+ctrls.ThreatRadius = createSliderRow(healCard, "Threat Radius", "Detection distance for threatening enemies", 15, 80,
+    Config.ThreatRadius, false, " studs", function(v)
+        Config.ThreatRadius = v
+    end, true)
+ctrls.RetreatHealth = createSliderRow(healCard, "Retreat Health %", "Retreat when health drops below this %", 10, 60,
+    Config.RetreatHealth, false, "%", function(v)
+        Config.RetreatHealth = v
+    end, true)
+
+-- GATHER TAB --
+createCategoryHeader(tabs.Gather, "🎯 Auto Pickup & Magnet")
+local gatherPickupCard = createCardGroup(tabs.Gather)
+ctrls.AutoPickup = createToggleRow(gatherPickupCard, "Auto Pickup", "Collects and brings dropped items into your bag",
+    Config.AutoPickup, function(v)
+        Config.AutoPickup = v
+    end, true)
+ctrls.PickupRange = createSliderRow(gatherPickupCard, "Pickup Radius", "Search distance for dropped items", 5, 80,
+    Config.PickupRange, false, " studs", function(v)
+        Config.PickupRange = v
+    end, true)
+ctrls.PickupInterval = createSliderRow(gatherPickupCard, "Pickup Interval", "Time between pickup cycles", 0.05, 0.6,
+    Config.PickupInterval, true, "s", function(v)
+        Config.PickupInterval = v
+    end, true)
+ctrls.PickupFilter = createDropdownRow(gatherPickupCard, "Item Filter", "Category to prioritize for pickup",
+    { "All", "Wood", "Stone", "Ore", "Food", "Weapon", "Valuables" }, Config.PickupFilter, function(v)
+        Config.PickupFilter = v
+    end, true)
+ctrls.AutoDropTrash = createToggleRow(gatherPickupCard, "Auto Drop Trash",
+    "Automatically drops useless leaves, grass and twigs", Config.AutoDropTrash, function(v)
+        Config.AutoDropTrash = v
+    end, true)
+ctrls.RareItemAlert = createToggleRow(gatherPickupCard, "Rare Item Alert",
+    "Screen alert when God Bag, Meteor or Ores drop", Config.RareItemAlert, function(v)
+        Config.RareItemAlert = v
+    end, true)
+
+createCategoryHeader(tabs.Gather, "🌳 Resource & Critter Auras")
+local auraCard = createCardGroup(tabs.Gather)
+ctrls.ResourceAura = createToggleRow(auraCard, "Resource Aura", "Swings at trees, rocks and ores in reach",
+    Config.ResourceAura, function(v)
+        Config.ResourceAura = v
+    end, true)
+ctrls.ResourceFilter = createDropdownRow(auraCard, "Resource Filter", "Target specific resource type",
+    { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.ResourceFilter, function(v)
+        Config.ResourceFilter = v
+    end, true)
+ctrls.ResourceRange = createSliderRow(auraCard, "Resource Range", "Reach distance for resource swings", 5, 40,
+    Config.ResourceRange, false, " studs", function(v)
+        Config.ResourceRange = v
+    end, true)
+ctrls.ResourceInterval = createSliderRow(auraCard, "Resource Interval", "Time between resource swings", 0.1, 0.8,
+    Config.ResourceInterval, true, "s", function(v)
+        Config.ResourceInterval = v
+    end, true)
+ctrls.CritterAura = createToggleRow(auraCard, "Critter Aura", "Swings at animals and mobs in reach", Config.CritterAura,
+    function(v)
+        Config.CritterAura = v
+    end, true)
+ctrls.CritterRange = createSliderRow(auraCard, "Critter Range", "Reach distance for critter swings", 5, 40,
+    Config.CritterRange, false, " studs", function(v)
+        Config.CritterRange = v
+    end, true)
+ctrls.CritterInterval = createSliderRow(auraCard, "Critter Interval", "Time between critter swings", 0.1, 0.8,
+    Config.CritterInterval, true, "s", function(v)
+        Config.CritterInterval = v
+    end, true)
+
+-- FARM TAB --
+createCategoryHeader(tabs.Farm, "🤖 Smart Auto Farm")
+local farmCard = createCardGroup(tabs.Farm)
+ctrls.AutoFarm = createToggleRow(farmCard, "Auto Farm", "Walks to & harvests nearest targets naturally", Config.AutoFarm,
+    function(v)
+        Config.AutoFarm = v
+    end, true)
+ctrls.FarmType = createDropdownRow(farmCard, "Farm Target", "Select entity type to farm",
+    { "Resource", "Critter", "Both" },
+    Config.FarmType, function(v)
+        Config.FarmType = v
+    end, true)
+ctrls.FarmFilter = createDropdownRow(farmCard, "Resource Focus", "Resource category when farming",
+    { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.FarmFilter, function(v)
+        Config.FarmFilter = v
+    end, true)
+ctrls.FarmRange = createSliderRow(farmCard, "Scan Radius", "Search distance for farm targets", 15, 150, Config.FarmRange,
+    false, " studs", function(v)
+        Config.FarmRange = v
+    end, true)
+ctrls.FarmMovement = createDropdownRow(farmCard, "Movement Method", "Navigation style to reach targets",
+    { "Walk", "Glide" }, Config.FarmMovement, function(v)
+        Config.FarmMovement = v
+    end, true)
+ctrls.FarmSpeed = createSliderRow(farmCard, "Farm Speed", "Walk & glide speed during auto farming", 16, 80,
+    Config.FarmSpeed or 36, false, " studs/s", function(v)
+        Config.FarmSpeed = v
+    end, true)
+ctrls.AutoEquipTool = createToggleRow(farmCard, "Auto Equip Best Tool", "Automatically equips best Axe/Pick/Weapon",
+    Config.AutoEquipTool, function(v)
+        Config.AutoEquipTool = v
+    end, true)
+ctrls.FilterUnreachable = createToggleRow(farmCard, "Filter Unreachable", "Ignores submerged & underground nodes",
+    Config.FilterUnreachable, function(v)
+        Config.FilterUnreachable = v
+    end, true)
+ctrls.StuckTimeout = createSliderRow(farmCard, "Stuck Timeout", "Seconds before changing target if obstructed", 3, 15,
+    Config.StuckTimeout, false, "s", function(v)
+        Config.StuckTimeout = v
+    end, true)
+ctrls.DeathRecovery = createToggleRow(farmCard, "Death Recovery", "Automatically re-engages farming after respawn",
+    Config.DeathRecovery, function(v)
+        Config.DeathRecovery = v
+    end, true)
+ctrls.SmartPathfinding = createToggleRow(farmCard, "Smart Pathfinding", "Advanced navigation with obstacle avoidance",
+    Config.SmartPathfinding, function(v)
+        Config.SmartPathfinding = v
+    end, true)
+
+createCategoryHeader(tabs.Farm, "📦 Deployables, Crops & Crafting")
+local deployCard = createCardGroup(tabs.Farm)
+ctrls.AutoChest = createToggleRow(deployCard, "Auto Loot Chests", "Opens and loots nearby chest structures",
+    Config.AutoChest, function(v)
+        Config.AutoChest = v
+    end, true)
+ctrls.ChestRange = createSliderRow(deployCard, "Chest Range", "Scan radius for chests", 5, 50, Config.ChestRange, false,
+    " studs", function(v)
+        Config.ChestRange = v
+    end, true)
+ctrls.AutoPlant = createToggleRow(deployCard, "Auto Plant & Harvest", "Plants empty boxes and harvests mature crops",
+    Config.AutoPlant, function(v)
+        Config.AutoPlant = v
+    end, true)
+ctrls.PlantRange = createSliderRow(deployCard, "Crop Range", "Scan radius for plant boxes & bushes", 10, 60,
+    Config.PlantRange, false, " studs", function(v)
+        Config.PlantRange = v
+    end, true)
+ctrls.AutoCraft = createToggleRow(deployCard, "Auto Craft Queue", "Repeatedly crafts selected item recipe",
+    Config.AutoCraft, function(v)
+        Config.AutoCraft = v
+    end, true)
+ctrls.CraftRecipe = createSearchDropdownRow(deployCard, "Craft Recipe", "Search or select any of 240+ recipes",
+    allCraftableRecipes, Config.CraftRecipe, function(v)
+        Config.CraftRecipe = v
+    end, true)
+ctrls.AutoProcess = createToggleRow(deployCard, "Auto Cook & Smelt", "Interacts with nearby Campfires & Furnaces",
+    Config.AutoProcess, function(v)
+        Config.AutoProcess = v
+    end, true)
+ctrls.AutoClaimDaily = createToggleRow(deployCard, "Auto Claim Daily", "Automatically claims daily rewards",
+    Config.AutoClaimDaily, function(v)
+        Config.AutoClaimDaily = v
+    end, true)
+
+-- ESP TAB --
+createCategoryHeader(tabs.ESP, "👁️ Visual ESP Highlights")
+local espCard = createCardGroup(tabs.ESP)
+ctrls.ESPPlayers = createToggleRow(espCard, "Player ESP", "Highlights other players with distance", Config.ESPPlayers,
+    function(v)
+        Config.ESPPlayers = v
+        if not v then clearESPCategory("player_") end
+    end, true)
+ctrls.ESPCritters = createToggleRow(espCard, "Critter ESP", "Highlights animals and mobs with HP", Config.ESPCritters,
+    function(v)
+        Config.ESPCritters = v
+        if not v then clearESPCategory("critter_") end
+    end, true)
+ctrls.ESPResources = createToggleRow(espCard, "Resource ESP", "Highlights trees, rocks, ores & crystals",
+    Config.ESPResources, function(v)
+        Config.ESPResources = v
+        if not v then clearESPCategory("res_") end
+    end, true)
+ctrls.ESPItems = createToggleRow(espCard, "Dropped Item ESP", "Highlights dropped loot and bags", Config.ESPItems,
+    function(v)
+        Config.ESPItems = v
+        if not v then clearESPCategory("item_") end
+    end, true)
+ctrls.ESPChests = createToggleRow(espCard, "Chest ESP", "Highlights placed storage chests", Config.ESPChests, function(v)
+    Config.ESPChests = v
+    if not v then clearESPCategory("chest_") end
+end, true)
+ctrls.ESPTraders = createToggleRow(espCard, "Trader ESP", "Highlights wandering traders on map", Config.ESPTraders,
+    function(v)
+        Config.ESPTraders = v
+        if not v then clearESPCategory("trader_") end
+    end, true)
+ctrls.ESPMeteors = createToggleRow(espCard, "Meteor & God ESP", "Highlights active Meteors & God Rocks",
+    Config.ESPMeteors, function(v)
+        Config.ESPMeteors = v
+        if not v then clearESPCategory("meteor_") end
+    end, true)
+ctrls.ESPDistance = createSliderRow(espCard, "ESP Distance", "Maximum render distance for highlights", 50, 600,
+    Config.ESPDistance, false, " studs", function(v)
+        Config.ESPDistance = v
+        if espFolder then
+            for _, bb in ipairs(espFolder:GetChildren()) do
+                if bb:IsA("BillboardGui") then
+                    bb.MaxDistance = v
+                end
+            end
+        end
+    end, true)
+ctrls.ESPTracers = createToggleRow(espCard, "Tracer Lines", "Draw lines from player to ESP targets",
+    Config.ESPTracers, function(v)
+        Config.ESPTracers = v
+    end, true)
+ctrls.ESPBoxes = createToggleRow(espCard, "Bounding Boxes", "Draw boxes around entities", Config.ESPBoxes,
+    function(v)
+        Config.ESPBoxes = v
+    end, true)
+ctrls.ESPHealthBars = createToggleRow(espCard, "Health Bars", "Show health bars above players/critters",
+    Config.ESPHealthBars, function(v)
+        Config.ESPHealthBars = v
+    end, true)
+ctrls.ESPNames = createToggleRow(espCard, "Show Names", "Display entity names in ESP", Config.ESPNames,
+    function(v)
+        Config.ESPNames = v
+    end, true)
+ctrls.ESPDistanceText = createToggleRow(espCard, "Show Distance", "Display distance to entities",
+    Config.ESPDistanceText, function(v)
+        Config.ESPDistanceText = v
+    end, true)
+
+-- MISC TAB --
+createCategoryHeader(tabs.Misc, "🏃 Movement & Character")
+local miscMoveCard = createCardGroup(tabs.Misc)
+ctrls.SpeedEnabled = createToggleRow(miscMoveCard, "Speed Boost", "Boosts player walk speed", Config.SpeedEnabled,
+    function(v)
+        Config.SpeedEnabled = v
+    end, true)
+ctrls.SpeedValue = createSliderRow(miscMoveCard, "Walk Speed", "Movement speed value", 16, 60, Config.SpeedValue, false,
+    "", function(v)
+        Config.SpeedValue = v
+    end, true)
+ctrls.JumpEnabled = createToggleRow(miscMoveCard, "Safe Jump Boost", "Safe capped JumpPower (50-83)", Config.JumpEnabled,
+    function(v)
+        Config.JumpEnabled = v
+    end, true)
+ctrls.JumpValue = createSliderRow(miscMoveCard, "Jump Power", "Server safe cap is 83", 50, 83, Config.JumpValue, false,
+    "", function(v)
+        Config.JumpValue = math.clamp(v, 50, 83)
+    end, true)
+ctrls.InfiniteJump = createToggleRow(miscMoveCard, "Infinite Jump", "Jump repeatedly in mid-air", Config.InfiniteJump,
+    function(v)
+        Config.InfiniteJump = v
+    end, true)
+ctrls.Noclip = createToggleRow(miscMoveCard, "Noclip", "Pass through solid walls and barriers", Config.Noclip,
+    function(v)
+        Config.Noclip = v
+    end, true)
+
+createCategoryHeader(tabs.Misc, "🌍 Environment, Boat & Session")
+local miscEnvCard = createCardGroup(tabs.Misc)
+ctrls.AntiAFK = createToggleRow(miscEnvCard, "Anti-AFK", "Prevents Roblox 20-minute idle disconnect", Config.AntiAFK,
+    function(v)
+        Config.AntiAFK = v
+    end, true)
+ctrls.Fullbright = createToggleRow(miscEnvCard, "Fullbright", "Removes darkness and shadows", Config.Fullbright,
+    function(v)
+        Config.Fullbright = v
+        if not v then
+            Lighting.Ambient = origLighting.Ambient
+            Lighting.OutdoorAmbient = origLighting.OutdoorAmbient
+            Lighting.Brightness = origLighting.Brightness
+        end
+    end, true)
+ctrls.NoFog = createToggleRow(miscEnvCard, "Remove Fog", "Clears atmospheric distance fog", Config.NoFog, function(v)
+    Config.NoFog = v
+    if not v then
+        Lighting.FogEnd = origLighting.FogEnd
+        if atmosphere then atmosphere.Density = origAtmosphereDensity end
+    end
+end, true)
+ctrls.DisableParticles = createToggleRow(miscEnvCard, "Disable Particles", "Boosts FPS by disabling particle emitters",
+    Config.DisableParticles, function(v)
+        Config.DisableParticles = v
+    end, true)
+ctrls.BoatCruise = createToggleRow(miscEnvCard, "Boat Cruise Boost", "Propels boats forward automatically",
+    Config.BoatCruise, function(v)
+        Config.BoatCruise = v
+    end, true)
+ctrls.BoatSpeed = createSliderRow(miscEnvCard, "Boat Speed", "Cruise and boost speed for boats", 20, 120,
+    Config.BoatSpeed or 45, false, " studs/s", function(v)
+        Config.BoatSpeed = v
+    end, true)
+ctrls.ChatMessages = createToggleRow(miscEnvCard, "Auto Chat Messages", "Sends periodic chat messages",
+    Config.ChatMessages, function(v)
+        Config.ChatMessages = v
+    end, true)
+ctrls.ChatInterval = createSliderRow(miscEnvCard, "Chat Interval", "Seconds between chat messages", 10, 120,
+    Config.ChatInterval, false, "s", function(v)
+        Config.ChatInterval = v
+    end, true)
+ctrls.AutoFishing = createToggleRow(miscEnvCard, "Auto Fishing", "Automatically fishes when equipped",
+    Config.AutoFishing, function(v)
+        Config.AutoFishing = v
+    end, true)
+ctrls.KillCounter = createToggleRow(miscEnvCard, "Kill Counter", "Display kill counter on screen",
+    Config.KillCounter, function(v)
+        Config.KillCounter = v
+    end, true)
+
+-- STATS TAB --
+createCategoryHeader(tabs.Stats, "📊 Session Statistics")
+local statsCard = createCardGroup(tabs.Stats)
+local statsKills = createInfoRow(statsCard, "🗡️ Kills", tostring(SessionStats.Kills), false)
+local statsResources = createInfoRow(statsCard, "⛏️ Resources Gathered", tostring(SessionStats.ResourcesGathered), false)
+local statsItems = createInfoRow(statsCard, "🎒 Items Picked Up", tostring(SessionStats.ItemsPickedUp), false)
+local statsChests = createInfoRow(statsCard, "📦 Chests Opened", tostring(SessionStats.ChestsOpened), false)
+local statsDistance = createInfoRow(statsCard, "👣 Distance Walked", string.format("%.2f studs", SessionStats.DistanceWalked), false)
+local statsTime = createInfoRow(statsCard, "⏱️ Session Time", "00:00:00", false)
+
+-- Update stats periodically
+task.spawn(function()
+    while mainFrame.Parent do
+        task.wait(1)
+        SessionStats.SessionTime = tick() - SessionStats.StartTime
+        local hours = math.floor(SessionStats.SessionTime / 3600)
+        local minutes = math.floor((SessionStats.SessionTime % 3600) / 60)
+        local seconds = math.floor(SessionStats.SessionTime % 60)
+        statsTime.SetValue(string.format("%02d:%02d:%02d", hours, minutes, seconds))
+        statsKills.SetValue(tostring(SessionStats.Kills))
+        statsResources.SetValue(tostring(SessionStats.ResourcesGathered))
+        statsItems.SetValue(tostring(SessionStats.ItemsPickedUp))
+        statsChests.SetValue(tostring(SessionStats.ChestsOpened))
+        statsDistance.SetValue(string.format("%.2f studs", SessionStats.DistanceWalked))
+    end
+end)
+
+-- WAYPOINTS TAB --
+createCategoryHeader(tabs.Waypoints, "📍 Saved Waypoints")
+local waypointCard = createCardGroup(tabs.Waypoints)
+
+local function SaveWaypoint(name)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        Config.Waypoints[name] = {
+            Position = root.Position,
+            CFrame = root.CFrame
+        }
+        AutoSaveConfig()
+        SendNotification("Identical", "Waypoint '" .. name .. "' saved!", 2, "📍")
+    end
+end
+
+local function TeleportToWaypoint(name)
+    if Config.Waypoints[name] then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.CFrame = Config.Waypoints[name].CFrame
+            SendNotification("Identical", "Teleported to '" .. name .. "'!", 2, "🚀")
+        end
+    end
+end
+
+createButtonRow(waypointCard, "Save Current Position", "SAVE HERE", "Save current position as waypoint", function()
+    SaveWaypoint("Waypoint_" .. os.time())
+end, true)
+
+createButtonRow(waypointCard, "Teleport to Spawn", "SPAWN", "Teleport to spawn point", function()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        local spawnPoint = Workspace:FindFirstChild("SpawnPoint") or Workspace:FindFirstChild("Spawn")
+        if spawnPoint then
+            root.CFrame = spawnPoint.CFrame
+            SendNotification("Identical", "Teleported to spawn!", 2, "🏠")
+        else
+            SendNotification("Identical", "Spawn point not found!", 2, "❌")
+        end
+    end
+end, true)
+
+-- Sync UI With Config --
+SyncUIWithConfig = function()
+    for key, c in pairs(ctrls) do
+        if Config[key] ~= nil then
+            if c.SetState then
+                c.SetState(Config[key])
+            elseif c.SetValue then
+                c.SetValue(Config[key])
+            elseif c.SetSelected then
+                c.SetSelected(Config[key])
+            end
+        end
+    end
+end
+
+switchTab("Home")
+
+-- Search Functionality --
+searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = searchBox.Text:lower():gsub("^%s*(.-)%s*$", "%1")
+    for _, item in ipairs(rowSearchIndex) do
+        local row = item.frame
+        if q == "" or item.query:find(q, 1, true) then
+            row.Visible = true
+        else
+            row.Visible = false
+        end
+    end
+end)
+
+-- Window Controls --
+local isMinimized = false
+local function ToggleMinimization()
+    isMinimized = not isMinimized
+    bodyFrame.Visible = not isMinimized
+    footerBar.Visible = not isMinimized
+    mainFrame.Size = isMinimized and UDim2.new(0, 720, 0, 40) or UDim2.new(0, 720, 0, 500)
+    minBtn.Text = isMinimized and "+" or "—"
+end
+
+minBtn.MouseButton1Click:Connect(ToggleMinimization)
+closeBtn.MouseButton1Click:Connect(UnloadScript)
+
+-- UI Visibility Toggle --
+local uiVisible = true
+ToggleUiVisibility = function()
+    uiVisible = not uiVisible
+    mainFrame.Visible = uiVisible
+    if floatingCrescent then
+        floatingCrescent.Visible = not uiVisible
+    end
+end
+
+-- Input Handling --
+table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input, gpe)
+    if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Config.UIKeybind or (typeof(Config.UIKeybind) == "string" and input.KeyCode.Name == Config.UIKeybind) then
+        ToggleUiVisibility()
+        return
+    end
+    if input.KeyCode == Config.StopKeybind or (typeof(Config.StopKeybind) == "string" and input.KeyCode.Name == Config.StopKeybind) or input.KeyCode == Enum.KeyCode.End then
+        EmergencyStop()
+        return
+    end
+    if gpe then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root and (Config.CombatReach or Config.CombatAura) then
+            local playersFolder = Workspace:FindFirstChild("Players")
+            if playersFolder then
+                local hitList = {}
+                for _, pChar in ipairs(playersFolder:GetChildren()) do
+                    if pChar ~= char then
+                        local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+                        local pHum = pChar:FindFirstChildOfClass("Humanoid")
+                        if pRoot and pHum and pHum.Health > 0 then
+                            local dist = (root.Position - pRoot.Position).Magnitude
+                            if dist <= Config.CombatRange then
+                                table.insert(hitList, pRoot)
+                            end
+                        end
+                    end
+                end
+
+                if #hitList > 0 then
+                    local primary = hitList[1]
+                    local lookDir = (primary.Position - root.Position).Unit
+                    if RemoteSwingTool then
+                        RemoteSwingTool:FireServer(lookDir, hitList)
+                    end
+                end
+            end
+        end
+    end
+end))
+
+-- Helper Functions --
+local function getRootPart(inst)
+    if not inst or not inst:IsA("Model") then return nil end
+    return inst.PrimaryPart
+        or inst:FindFirstChild("HumanoidRootPart")
+        or inst:FindFirstChild("Torso")
+        or inst:FindFirstChild("UpperTorso")
+        or inst:FindFirstChild("Head")
+        or inst:FindFirstChildWhichIsA("BasePart")
+end
+
+local function hasLineOfSight(fromPos, toPos, ignoreList)
+    if not Config.LineOfSight and not Config.AimbotWallCheck then return true end
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = ignoreList or { LocalPlayer.Character }
+    local result = Workspace:Raycast(fromPos, (toPos - fromPos), params)
+    return result == nil or result.Instance:IsDescendantOf(ignoreList[1])
+end
+
+local trackedVelocities = {}
+local function updateVelocityTracker(dt)
+    if not dt or dt <= 0 then return end
+    local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+    if critters then
+        for _, c in ipairs(critters:GetChildren()) do
+            local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("Torso") or
+                c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("Head") or getRootPart(c)
+            if p then
+                local curPos = p.Position
+                local rec = trackedVelocities[p]
+                if rec then
+                    local instVel = (curPos - rec.pos) / dt
+                    rec.vel = rec.vel:Lerp(instVel, 0.45)
+                    rec.pos = curPos
+                else
+                    trackedVelocities[p] = { pos = curPos, vel = p.AssemblyLinearVelocity or Vector3.zero }
+                end
+            end
+        end
+    end
+    local players = Workspace:FindFirstChild("Players")
+    if players then
+        for _, pChar in ipairs(players:GetChildren()) do
+            local p = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Head")
+            if p then
+                local curPos = p.Position
+                local rec = trackedVelocities[p]
+                if rec then
+                    local instVel = (curPos - rec.pos) / dt
+                    rec.vel = rec.vel:Lerp(instVel, 0.45)
+                    rec.pos = curPos
+                else
+                    trackedVelocities[p] = { pos = curPos, vel = p.AssemblyLinearVelocity or Vector3.zero }
+                end
+            end
+        end
+    end
+end
+
+local function isBowEquipped()
+    local char = LocalPlayer.Character
+    local tools = char and char:FindFirstChild("Tools")
+    if tools then
+        for _, t in ipairs(tools:GetChildren()) do
+            local n = t.Name:lower()
+            if n:find("bow") or n:find("crossbow") or n:find("sling") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function getEquippedWeaponSpeed()
+    local char = LocalPlayer.Character
+    local tools = char and char:FindFirstChild("Tools")
+    if tools then
+        for _, t in ipairs(tools:GetChildren()) do
+            local n = t.Name:lower()
+            if n:find("iron bow") then
+                return 450
+            elseif n:find("crossbow") and n:find("magnetite") then
+                return 650
+            elseif n:find("crossbow") then
+                return 500
+            elseif n:find("god sling") or n:find("sling") then
+                return 270
+            elseif n:find("bow") then
+                return 350
+            end
+        end
+    end
+    return 350
+end
+
+local function computeAimPoint(targetPart, isCritter)
+    local char = LocalPlayer.Character
+    local launchOrigin = char and (char:GetPivot() * CFrame.new(1.4, -0.4, -3)).Position or
+        (Camera and Camera.CFrame.Position or Vector3.zero)
+    local targetPos = targetPart.Position
+
+    if not isCritter and targetPart.Name == "Head" then
+        targetPos = targetPart.Position
+    elseif not isCritter then
+        targetPos = targetPart.Position + Vector3.new(0, 1.4, 0)
+    else
+        targetPos = targetPart.Position + Vector3.new(0, math.min(targetPart.Size.Y * 0.2, 0.4), 0)
+    end
+
+    local speed = getEquippedWeaponSpeed()
+    local diff = targetPos - launchOrigin
+    local dist = diff.Magnitude
+    local flightTime = dist / speed
+
+    local targetVel = Vector3.zero
+    if Config.AimbotPrediction then
+        local rec = trackedVelocities[targetPart] or
+            (targetPart.Parent and (trackedVelocities[targetPart.Parent:FindFirstChild("HumanoidRootPart")] or trackedVelocities[targetPart.Parent:FindFirstChild("ENTITY_HITBOX")]))
+        if rec and rec.vel and rec.vel.Magnitude > 0.3 then
+            targetVel = rec.vel
+        elseif targetPart.AssemblyLinearVelocity and targetPart.AssemblyLinearVelocity.Magnitude > 0.3 then
+            targetVel = targetPart.AssemblyLinearVelocity
+        end
+    end
+
+    local predictedTargetPos = targetPos + (targetVel * flightTime)
+    local delta = predictedTargetPos - launchOrigin
+    local g = 122.2
+    local vLaunch = (delta + Vector3.new(0, 0.5 * g * (flightTime ^ 2), 0)) / flightTime
+
+    return launchOrigin + (vLaunch.Unit * 1000)
+end
+
+local function getAimbotTarget()
+    local nearestPart = nil
+    local nearestAimPoint = nil
+    local nearestScreenDist = math.huge
+    local mousePos = UserInputService:GetMouseLocation()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local maxWorldRange = Config.AimbotRange or 300
+
+    if Config.AimbotTarget == "Players" or Config.AimbotTarget == "Both" then
+        local playersFolder = Workspace:FindFirstChild("Players")
+        if playersFolder then
+            for _, pChar in ipairs(playersFolder:GetChildren()) do
+                if pChar ~= char then
+                    local targetPart = (Config.AimbotPart == "Head" and pChar:FindFirstChild("Head")) or
+                        pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("UpperTorso")
+                    local pHum = pChar:FindFirstChildOfClass("Humanoid")
+                    if targetPart and pHum and pHum.Health > 0 then
+                        local worldDist = root and (root.Position - targetPart.Position).Magnitude or 0
+                        if worldDist <= maxWorldRange then
+                            if hasLineOfSight(root.Position, targetPart.Position, { char, pChar }) then
+                                local aimPoint = computeAimPoint(targetPart, false)
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(aimPoint)
+                                if onScreen then
+                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                                    if screenDist < nearestScreenDist then
+                                        nearestScreenDist = screenDist
+                                        nearestPart = targetPart
+                                        nearestAimPoint = aimPoint
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if not nearestPart and (Config.AimbotTarget == "Critters" or Config.AimbotTarget == "Both") then
+        local crittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+        if crittersFolder then
+            for _, critter in ipairs(crittersFolder:GetChildren()) do
+                local part = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("Torso") or
+                    critter:FindFirstChild("Head") or getRootPart(critter)
+                if part then
+                    local worldDist = root and (root.Position - part.Position).Magnitude or 0
+                    if worldDist <= maxWorldRange then
+                        local aimPoint = computeAimPoint(part, true)
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(aimPoint)
+                        if onScreen then
+                            local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - mousePos).Magnitude
+                            if screenDist < nearestScreenDist then
+                                nearestScreenDist = screenDist
+                                nearestPart = part
+                                nearestAimPoint = aimPoint
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nearestPart, nearestAimPoint
+end
+
+-- Aimbot Loop --
+table.insert(activeConnections, RunService.RenderStepped:Connect(function()
+    if Config.BowAimbot and Camera and isBowEquipped() then
+        local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+        if isRightClicking then
+            local targetPart, aimPoint = getAimbotTarget()
+            if targetPart and aimPoint then
+                local targetCF = CFrame.lookAt(Camera.CFrame.Position, aimPoint)
+                if Config.AimbotSmoothness and Config.AimbotSmoothness > 0 then
+                    local alpha = math.clamp(1 - (Config.AimbotSmoothness / 10), 0.08, 1)
+                    Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+                else
+                    Camera.CFrame = targetCF
+                end
+            end
+        end
+    end
+end))
+
+-- ESP System --
+local function getOrCreateESP(key, adornee, text, color)
+    if not adornee or not adornee.Parent then
+        if espStorage[key] then
+            pcall(function() espStorage[key]:Destroy() end)
+            espStorage[key] = nil
+        end
+        return nil
+    end
+
+    local bb = espStorage[key]
+    if not bb or not bb.Parent then
+        bb = Instance.new("BillboardGui")
+        bb.Name = key
+        bb.Size = UDim2.new(0, 140, 0, 28)
+        bb.StudsOffset = Vector3.new(0, 3.5, 0)
+        bb.AlwaysOnTop = true
+        bb.MaxDistance = Config.ESPDistance
+        bb.Adornee = adornee
+        bb.Parent = espFolder
+
+        local lbl = Instance.new("TextLabel")
+        lbl.Name = "Label"
+        lbl.Text = text
+        lbl.Font = Enum.Font.GothamBold
+        lbl.TextSize = 11
+        lbl.TextColor3 = color or Color3.new(1, 1, 1)
+        lbl.TextStrokeTransparency = 0.3
+        lbl.BackgroundTransparency = 1
+        lbl.Size = UDim2.new(1, 0, 1, 0)
+        lbl.Parent = bb
+
+        espStorage[key] = bb
+    else
+        bb.Adornee = adornee
+        bb.Parent = espFolder
+        bb.MaxDistance = Config.ESPDistance
+        local lbl = bb:FindFirstChild("Label")
+        if lbl then
+            lbl.Text = text
+            if color then lbl.TextColor3 = color end
+        end
+    end
+    return bb
+end
+
+-- Auto Equip Best Tool --
+local function autoEquipBestToolFor(targetCategory)
+    if not Config.AutoEquipTool then return end
+    pcall(function()
+        local GameUtil = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("GameUtil") and
+            require(RS.Modules.GameUtil)
+        if GameUtil and GameUtil.Data and GameUtil.Data.toolbar and Packets and Packets.EquipTool then
+            for slot = 1, 6 do
+                local item = GameUtil.Data.toolbar[slot]
+                if type(item) == "table" and item.name then
+                    local n = item.name:lower()
+                    local isMatch = false
+                    if targetCategory == "Wood" and (n:find("axe") or n:find("hatchet")) then
+                        isMatch = true
+                    elseif (targetCategory == "Stone" or targetCategory == "Ore" or targetCategory == "Crystal") and (n:find("pick") or n:find("hammer")) then
+                        isMatch = true
+                    elseif (targetCategory == "Combat" or targetCategory == "Critter") and (n:find("sword") or n:find("blade") or n:find("club") or n:find("spear")) then
+                        isMatch = true
+                    end
+
+                    if isMatch then
+                        if GameUtil.Data.equipped ~= slot then
+                            Packets.EquipTool.send(slot)
+                        end
+                        return
+                    end
+                end
+            end
+        end
+
+        local bag = LocalPlayer.PlayerGui:FindFirstChild("MainGui") and
+            LocalPlayer.PlayerGui.MainGui:FindFirstChild("Panels") and
+            LocalPlayer.PlayerGui.MainGui.Panels:FindFirstChild("Bag")
+        if RemoteEquipTool and bag then
+            for _, item in ipairs(bag:GetDescendants()) do
+                if item:IsA("TextLabel") and item.Name == "ItemName" then
+                    local n = item.Text:lower()
+                    if targetCategory == "Wood" and n:find("axe") then
+                        RemoteEquipTool:FireServer(item.Text)
+                        break
+                    elseif (targetCategory == "Stone" or targetCategory == "Ore" or targetCategory == "Crystal") and n:find("pick") then
+                        RemoteEquipTool:FireServer(item.Text)
+                        break
+                    elseif (targetCategory == "Combat" or targetCategory == "Critter") and (n:find("sword") or n:find("blade") or n:find("hammer") or n:find("club") or n:find("spear")) then
+                        RemoteEquipTool:FireServer(item.Text)
+                        break
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Strike Target --
+local function strikeTarget(targetPart)
+    if not targetPart or not LocalPlayer.Character then return end
+    local char = LocalPlayer.Character
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local eid = tonumber(targetPart:GetAttribute("EntityID") or
+        (targetPart.Parent and targetPart.Parent:GetAttribute("EntityID")))
+    local lookDir = (targetPart.Position - root.Position).Unit
+    local st = Clock and Clock.getServerTime and Clock.getServerTime(true) or os.clock()
+    local swingCFrame = CFrame.new(root.Position, targetPart.Position)
+
+    pcall(function()
+        local toolMod = RS:FindFirstChild("Game") and RS.Game:FindFirstChild("tool") and require(RS.Game.tool)
+        if toolMod and toolMod.swingTool then
+            toolMod.swingTool()
+        end
+    end)
+
+    if RemoteSwingTool then
+        pcall(function() RemoteSwingTool:FireServer(lookDir, { targetPart }) end)
+    end
+
+    if Packets and Packets.SwingTool and eid then
+        pcall(function()
+            Packets.SwingTool.send({
+                entityIDs = { { entityID = eid } },
+                cframe = swingCFrame,
+                timestamp = st
+            })
+        end)
+    end
+    
+    -- Update stats
+    SessionStats.ResourcesGathered = SessionStats.ResourcesGathered + 1
+end
+
+-- Pickup Item --
+local function pickupItem(item)
+    if not item then return end
+    local eid = tonumber(item:GetAttribute("EntityID") or (item.Parent and item.Parent:GetAttribute("EntityID")))
+    if eid then
+        if RemotePickup then
+            pcall(function() RemotePickup:FireServer(eid) end)
+        end
+        if Packets and Packets.Pickup then
+            pcall(function() Packets.Pickup.send(eid) end)
+        end
+    else
+        if RemotePickup then
+            pcall(function() RemotePickup:FireServer(item) end)
+        end
+    end
+    
+    -- Update stats
+    SessionStats.ItemsPickedUp = SessionStats.ItemsPickedUp + 1
+end
+
+-- Resource Accessibility Check --
+local function isResourceAccessible(rootPos, targetPos, targetObj)
+    if not Config.FilterUnreachable then return true end
+    local yDiff = math.abs(targetPos.Y - rootPos.Y)
+    if yDiff > 14 then
+        return false
+    end
+
+    if targetPos.Y < -15 and rootPos.Y > -10 then
+        return false
+    end
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = { LocalPlayer.Character, targetObj }
+    local ray = Workspace:Raycast(rootPos, (targetPos - rootPos), rayParams)
+    if ray and ray.Instance and ray.Instance:IsA("Terrain") and ray.Material ~= Enum.Material.Water then
+        return false
+    end
+    return true
+end
+
+-- Iterate Resources --
+local function forEachResource(callback)
+    local resFolder = Workspace:FindFirstChild("Resources")
+    if resFolder then
+        for _, obj in ipairs(resFolder:GetChildren()) do
+            callback(obj)
+        end
+    end
+    for _, obj in ipairs(Workspace:GetChildren()) do
+        if obj ~= resFolder and obj.Name ~= "Terrain" and obj.Name ~= "Players" and obj.Name ~= "Critters" and obj.Name ~= "Items" and obj.Name ~= "Deployables" and obj.Name ~= "Boats" and obj.Name ~= "Camera" then
+            callback(obj)
+        end
+    end
+end
+
+-- Main Loop Variables --
+local lastCombatTime = 0
+local lastResourceTime = 0
+local lastCritterTime = 0
+local lastPickupTime = 0
+local lastHealTime = 0
+local lastChestTime = 0
+local lastDropTime = 0
+local lastCraftTime = 0
+local lastPlantTime = 0
+local lastProcessTime = 0
+local lastFarmMoveTime = 0
+local lastFarmSwingTime = 0
+local lastChatTime = 0
+local lastFishingTime = 0
+local lastPosition = nil
+local farmTarget = nil
+local farmApproachPos = nil
+local farmTargetAcquiredTime = 0
+local lastJumpState = false
+
+-- Main Game Loop --
+table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
+    updateVelocityTracker(dt)
+    local now = tick()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+
+    -- Track distance walked
+    if root and lastPosition then
+        local distance = (root.Position - lastPosition).Magnitude
+        SessionStats.DistanceWalked = SessionStats.DistanceWalked + distance
+    end
+    if root then
+        lastPosition = root.Position
+    end
+
+    -- Movement & Speed --
+    if hum then
+        if Config.AutoFarm then
+            local fSpeed = Config.FarmSpeed or 36
+            if hum.WalkSpeed ~= fSpeed then
+                hum.WalkSpeed = fSpeed
+            end
+        elseif Config.SpeedEnabled then
+            local targetSpeed = math.clamp(Config.SpeedValue, 16, 60)
+            if hum.WalkSpeed ~= targetSpeed then
+                hum.WalkSpeed = targetSpeed
+            end
+        else
+            if hum.WalkSpeed ~= 16 then
+                hum.WalkSpeed = 16
+            end
+        end
+
+        if Config.JumpEnabled then
+            local targetJump = math.clamp(Config.JumpValue, 50, 83)
+            if hum.JumpPower ~= targetJump then
+                hum.JumpPower = targetJump
+            end
+        else
+            if hum.JumpPower ~= 50 then
+                hum.JumpPower = 50
+            end
+        end
+    end
+
+    -- Noclip --
+    if Config.Noclip and char then
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    -- Infinite Jump --
+    if Config.InfiniteJump and hum then
+        local jumping = UserInputService:IsKeyDown(Enum.KeyCode.Space)
+        if jumping and not lastJumpState then
+            hum:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+        lastJumpState = jumping
+    end
+
+    -- Boat Cruise --
+    if Config.BoatCruise and hum then
+        local seat = hum.SeatPart
+        if seat then
+            local speed = Config.BoatSpeed or 45
+            local look = seat.CFrame.LookVector
+            local boat = seat.Parent
+            local boatPart = (boat and (boat.PrimaryPart or boat:FindFirstChild("MainPart") or boat:FindFirstChildWhichIsA("BasePart"))) or
+                seat
+
+            if seat:IsA("VehicleSeat") then
+                seat.ThrottleFloat = 1
+                seat.Throttle = 1
+                seat.MaxSpeed = speed
+            end
+
+            if boatPart and boatPart:IsA("BasePart") then
+                boatPart.AssemblyLinearVelocity = Vector3.new(look.X * speed, boatPart.AssemblyLinearVelocity.Y,
+                    look.Z * speed)
+            end
+        end
+    end
+
+    -- Combat Reach --
+    if Config.CombatReach and root then
+        local playersFolder = Workspace:FindFirstChild("Players")
+        if playersFolder then
+            for _, pChar in ipairs(playersFolder:GetChildren()) do
+                if pChar ~= char then
+                    local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+                    if pRoot then
+                        if not origHitboxSizes[pRoot] then
+                            origHitboxSizes[pRoot] = pRoot.Size
+                        end
+                        pRoot.Size = Vector3.new(Config.CombatRange, Config.CombatRange, Config.CombatRange)
+                        pRoot.Transparency = 0.8
+                        pRoot.CanCollide = false
+                    end
+                end
+            end
+        end
+    end
+
+    local paceVariance = Config.HumanizedPacing and ((math.random(-25, 25)) / 1000) or 0
+
+    -- Auto Dodge --
+    if Config.AutoDodge and root and hum then
+        local playersFolder = Workspace:FindFirstChild("Players")
+        if playersFolder then
+            for _, enemy in ipairs(playersFolder:GetChildren()) do
+                if enemy ~= char then
+                    local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+                    if eRoot then
+                        local dist = (root.Position - eRoot.Position).Magnitude
+                        if dist <= Config.DodgeThreshold then
+                            -- Check if enemy is moving towards us
+                            local enemyVel = eRoot.AssemblyLinearVelocity
+                            local toUs = (root.Position - eRoot.Position).Unit
+                            local dotProduct = enemyVel:Dot(toUs)
+                            if dotProduct > 10 then -- Enemy moving towards us fast
+                                local dodgeDir = (root.Position - eRoot.Position).Unit
+                                local perpendicularDir = Vector3.new(-dodgeDir.Z, 0, dodgeDir.X)
+                                hum:MoveTo(root.Position + perpendicularDir * 15)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Threat Protection --
+    if Config.ThreatProtection and root and hum and (hum.Health / hum.MaxHealth * 100) < Config.RetreatHealth then
+        local playersFolder = Workspace:FindFirstChild("Players")
+        if playersFolder then
+            for _, enemy in ipairs(playersFolder:GetChildren()) do
+                if enemy ~= char then
+                    local eRoot = enemy:FindFirstChild("HumanoidRootPart")
+                    if eRoot then
+                        local dist = (root.Position - eRoot.Position).Magnitude
+                        if dist <= Config.ThreatRadius then
+                            local retreatDir = (root.Position - eRoot.Position).Unit
+                            hum:MoveTo(root.Position + retreatDir * 35)
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Combat Aura --
+    if Config.CombatAura and root and (now - lastCombatTime >= (Config.CombatInterval + paceVariance)) then
+        local playersFolder = Workspace:FindFirstChild("Players")
+        if playersFolder then
+            local bestTarget = nil
+            local bestMetric = math.huge
+
+            for _, pChar in ipairs(playersFolder:GetChildren()) do
+                if pChar ~= char then
+                    local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+                    local pHum = pChar:FindFirstChildOfClass("Humanoid")
+                    if pRoot and pHum and pHum.Health > 0 then
+                        local dist = (root.Position - pRoot.Position).Magnitude
+                        if dist <= Config.CombatRange then
+                            if hasLineOfSight(root.Position, pRoot.Position, { char, pChar }) then
+                                local metric = (Config.TargetPriority == "Lowest HP") and pHum.Health or dist
+                                if metric < bestMetric then
+                                    bestMetric = metric
+                                    bestTarget = pRoot
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if bestTarget then
+                autoEquipBestToolFor("Combat")
+                strikeTarget(bestTarget)
+                lastCombatTime = now
+                -- Update kill counter (simplified - in real game would check if enemy died)
+                SessionStats.Kills = SessionStats.Kills + 1
+            end
+        end
+    end
+
+    -- Auto Heal --
+    if Config.AutoHeal and hum and (hum.Health / hum.MaxHealth * 100) <= Config.HealThreshold and (now - lastHealTime >= 0.4) then
+        if RemoteConsume then
+            RemoteConsume:FireServer(Config.HealFood)
+        elseif RemoteUseBagItem then
+            RemoteUseBagItem:FireServer(Config.HealFood)
+        end
+        lastHealTime = now
+    end
+
+    -- Resource Aura --
+    if Config.ResourceAura and root and (now - lastResourceTime >= (Config.ResourceInterval + paceVariance)) then
+        local foundResource = nil
+        local nearestDist = Config.ResourceRange
+        local foundCategory = "Wood"
+
+        forEachResource(function(obj)
+            if obj:IsA("Model") or obj:IsA("BasePart") then
+                local n = obj.Name:lower()
+                local isMatch = false
+                local category = "Wood"
+
+                if Config.ResourceFilter == "All" then
+                    isMatch = n:find("tree") or n:find("rock") or n:find("ore") or n:find("iron") or n:find("gold") or
+                        n:find("crystal") or n:find("stone") or n:find("coal") or n:find("bush") or n:find("plant")
+                    if n:find("rock") or n:find("stone") then
+                        category = "Stone"
+                    elseif n:find("ore") or n:find("iron") or n:find("gold") or n:find("coal") then
+                        category = "Ore"
+                    elseif n:find("crystal") then
+                        category = "Crystal"
+                    end
+                elseif Config.ResourceFilter == "Wood" then
+                    isMatch = n:find("tree") or n:find("wood") or n:find("log") or n:find("bush")
+                    category = "Wood"
+                elseif Config.ResourceFilter == "Stone" then
+                    isMatch = n:find("rock") or n:find("stone") or n:find("boulder")
+                    category = "Stone"
+                elseif Config.ResourceFilter == "Ore" then
+                    isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("coal") or n:find("magnetite")
+                    category = "Ore"
+                elseif Config.ResourceFilter == "Crystal" then
+                    isMatch = n:find("crystal") or n:find("emerald") or n:find("ruby") or n:find("pink")
+                    category = "Crystal"
+                elseif Config.ResourceFilter == "Fiber" then
+                    isMatch = n:find("bush") or n:find("plant") or n:find("grass")
+                    category = "Wood"
+                end
+
+                if isMatch then
+                    local p = obj:IsA("BasePart") and obj or getRootPart(obj)
+                    if p then
+                        local dist = (root.Position - p.Position).Magnitude
+                        if dist <= nearestDist and isResourceAccessible(root.Position, p.Position, obj) then
+                            nearestDist = dist
+                            foundResource = p
+                            foundCategory = category
+                        end
+                    end
+                end
+            end
+        end)
+
+        if foundResource then
+            autoEquipBestToolFor(foundCategory)
+            strikeTarget(foundResource)
+            lastResourceTime = now
+        end
+    end
+
+    -- Critter Aura --
+    if Config.CritterAura and root and (now - lastCritterTime >= (Config.CritterInterval + paceVariance)) then
+        local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+        if critters then
+            local nearestCritter = nil
+            local nearestDist = Config.CritterRange
+
+            for _, critter in ipairs(critters:GetChildren()) do
+                local p = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("Torso") or
+                    critter:FindFirstChild("HumanoidRootPart") or getRootPart(critter)
+                if p then
+                    local dist = (root.Position - p.Position).Magnitude
+                    if dist <= nearestDist then
+                        nearestDist = dist
+                        nearestCritter = p
+                    end
+                end
+            end
+
+            if nearestCritter then
+                autoEquipBestToolFor("Critter")
+                strikeTarget(nearestCritter)
+                lastCritterTime = now
+            end
+        end
+    end
+
+    -- Auto Farm --
+    if Config.AutoFarm and root and hum then
+        if farmTarget and farmTarget.Parent and (now - farmTargetAcquiredTime < (Config.StuckTimeout or 6)) and isResourceAccessible(root.Position, farmTarget.Position, farmTarget.Parent) then
+            local targetPos = farmTarget.Position
+            local flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
+            local flatDist = (root.Position - flatTarget).Magnitude
+
+            if not farmApproachPos then
+                farmApproachPos = flatTarget + (root.Position - flatTarget).Unit * 4.2
+            end
+
+            if flatDist > 5.2 then
+                if Config.FarmMovement == "Tween" or Config.FarmMovement == "Glide" then
+                    local moveDir = (farmApproachPos - root.Position)
+                    local hDir = Vector3.new(moveDir.X, 0, moveDir.Z)
+                    if hDir.Magnitude > 0.5 then
+                        local speed = Config.FarmSpeed or 36
+                        local targetVel = hDir.Unit * speed
+                        root.AssemblyLinearVelocity = Vector3.new(targetVel.X, root.AssemblyLinearVelocity.Y, targetVel
+                            .Z)
+                        root.CFrame = CFrame.new(root.Position, flatTarget)
+                    end
+                else
+                    if (now - lastFarmMoveTime >= 0.4) or (hum.MoveDirection.Magnitude < 0.05) then
+                        hum:MoveTo(farmApproachPos)
+                        lastFarmMoveTime = now
+                    end
+                end
+            else
+                if (flatTarget - root.Position).Magnitude > 0.1 then
+                    root.CFrame = root.CFrame:Lerp(CFrame.new(root.Position, flatTarget), 0.25)
+                end
+
+                local targetName = farmTarget.Parent and farmTarget.Parent.Name:lower() or farmTarget.Name:lower()
+                local cat = "Wood"
+                if targetName:find("rock") or targetName:find("stone") then
+                    cat = "Stone"
+                elseif targetName:find("ore") or targetName:find("iron") or targetName:find("gold") then
+                    cat = "Ore"
+                elseif targetName:find("crystal") then
+                    cat = "Crystal"
+                elseif farmTarget.Parent and (farmTarget.Parent.Parent == Workspace:FindFirstChild("Critters") or farmTarget.Parent.Parent == Workspace:FindFirstChild("HumanoidCritters")) then
+                    cat = "Critter"
+                end
+
+                autoEquipBestToolFor(cat)
+
+                if now - lastFarmSwingTime >= (Config.ResourceInterval or 0.25) then
+                    strikeTarget(farmTarget)
+                    lastFarmSwingTime = now
+                end
+
+                local itemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or
+                    Workspace
+                for _, item in ipairs(itemsFolder:GetChildren()) do
+                    local ip = item:IsA("BasePart") and item or getRootPart(item)
+                    if ip and (root.Position - ip.Position).Magnitude <= 20 then
+                        pickupItem(item)
+                    end
+                end
+            end
+        else
+            farmTarget = nil
+            farmApproachPos = nil
+            local bestTarget = nil
+            local bestDist = Config.FarmRange or 80
+
+            if Config.FarmType == "Resource" or Config.FarmType == "Both" then
+                forEachResource(function(obj)
+                    if obj:IsA("Model") or obj:IsA("BasePart") then
+                        local n = obj.Name:lower()
+                        local isMatch = false
+                        if Config.FarmFilter == "All" then
+                            isMatch = n:find("tree") or n:find("rock") or n:find("ore") or n:find("iron") or
+                                n:find("gold") or n:find("crystal") or n:find("stone") or n:find("bush")
+                        elseif Config.FarmFilter == "Wood" then
+                            isMatch = n:find("tree") or n:find("wood") or n:find("bush")
+                        elseif Config.FarmFilter == "Stone" then
+                            isMatch = n:find("rock") or n:find("stone")
+                        elseif Config.FarmFilter == "Ore" then
+                            isMatch = n:find("ore") or n:find("iron") or n:find("gold")
+                        elseif Config.FarmFilter == "Crystal" then
+                            isMatch = n:find("crystal")
+                        end
+
+                        if isMatch then
+                            local p = obj:IsA("BasePart") and obj or getRootPart(obj)
+                            if p then
+                                local dist = (root.Position - p.Position).Magnitude
+                                if dist <= bestDist and isResourceAccessible(root.Position, p.Position, obj) then
+                                    bestDist = dist
+                                    bestTarget = p
+                                end
+                            end
+                        end
+                    end
+                end)
+            end
+
+            if not bestTarget and (Config.FarmType == "Critter" or Config.FarmType == "Both") then
+                local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+                if critters then
+                    for _, critter in ipairs(critters:GetChildren()) do
+                        local p = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("HumanoidRootPart") or
+                            getRootPart(critter)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= bestDist then
+                                bestDist = dist
+                                bestTarget = p
+                            end
+                        end
+                    end
+                end
+            end
+
+            if bestTarget then
+                farmTarget = bestTarget
+                farmTargetAcquiredTime = now
+                local targetPos = bestTarget.Position
+                local flatTarget = Vector3.new(targetPos.X, root.Position.Y, targetPos.Z)
+                farmApproachPos = flatTarget + (root.Position - flatTarget).Unit * 4.2
+                if Config.FarmMovement ~= "Tween" and Config.FarmMovement ~= "Glide" then
+                    hum:MoveTo(farmApproachPos)
+                end
+                lastFarmMoveTime = now
+            end
+        end
+    end
+
+    -- Auto Pickup --
+    if Config.AutoPickup and root and (now - lastPickupTime >= (Config.PickupInterval + paceVariance)) then
+        local itemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or Workspace
+        local targetItem = nil
+        local nearestDist = Config.PickupRange
+
+        for _, item in ipairs(itemsFolder:GetChildren()) do
+            if item:IsA("Model") or item:IsA("BasePart") then
+                local n = item.Name:lower()
+                local isMatch = false
+
+                if Config.PickupFilter == "All" then
+                    isMatch = not item:FindFirstChildOfClass("Humanoid") and (item.Name ~= "Terrain") and
+                        not item:IsA("Terrain")
+                elseif Config.PickupFilter == "Wood" then
+                    isMatch = n:find("wood") or n:find("log") or n:find("stick")
+                elseif Config.PickupFilter == "Stone" then
+                    isMatch = n:find("stone") or n:find("rock")
+                elseif Config.PickupFilter == "Ore" then
+                    isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("magnetite")
+                elseif Config.PickupFilter == "Food" then
+                    isMatch = n:find("meat") or n:find("berry") or n:find("fruit") or n:find("apple")
+                elseif Config.PickupFilter == "Weapon" then
+                    isMatch = n:find("sword") or n:find("axe") or n:find("pick") or n:find("bow") or n:find("hammer")
+                elseif Config.PickupFilter == "Valuables" then
+                    isMatch = n:find("emerald") or n:find("god") or n:find("magnetite") or n:find("essence") or
+                        n:find("meteor")
+                end
+
+                if isMatch then
+                    local p = item:IsA("BasePart") and item or getRootPart(item)
+                    if p then
+                        local dist = (root.Position - p.Position).Magnitude
+                        if dist <= nearestDist then
+                            nearestDist = dist
+                            targetItem = item
+                        end
+                    end
+                end
+            end
+        end
+
+        if targetItem then
+            pickupItem(targetItem)
+            lastPickupTime = now
+        end
+    end
+
+    -- Auto Drop Trash --
+    if Config.AutoDropTrash and (now - lastDropTime >= 1.5) then
+        local bag = LocalPlayer.PlayerGui:FindFirstChild("MainGui") and
+            LocalPlayer.PlayerGui.MainGui:FindFirstChild("Panels") and
+            LocalPlayer.PlayerGui.MainGui.Panels:FindFirstChild("Bag")
+        if bag and RemoteDropBagItem then
+            for _, item in ipairs(bag:GetDescendants()) do
+                if item:IsA("TextLabel") and item.Name == "ItemName" then
+                    local n = item.Text:lower()
+                    if n:find("leaves") or n:find("grass") or n:find("bark") or n:find("twig") then
+                        local slotIndex = tonumber(item.Parent.Name) or 1
+                        RemoteDropBagItem:FireServer(slotIndex)
+                        break
+                    end
+                end
+            end
+        end
+        lastDropTime = now
+    end
+
+    -- Auto Craft --
+    if Config.AutoCraft and (now - lastCraftTime >= (Config.CraftInterval or 1.5)) then
+        if Config.CraftRecipe and Config.CraftRecipe ~= "" then
+            pcall(function()
+                local ItemIDS = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("ItemIDS") and
+                    require(RS.Modules.ItemIDS)
+                local id = ItemIDS and ItemIDS[Config.CraftRecipe]
+                if id and Packets and Packets.CraftItem then
+                    Packets.CraftItem.send(id)
+                end
+            end)
+            if RemoteCraftItem then
+                pcall(function() RemoteCraftItem:FireServer(Config.CraftRecipe) end)
+            end
+        end
+        lastCraftTime = now
+    end
+
+    -- Auto Plant --
+    if Config.AutoPlant and root and (now - lastPlantTime >= 2.0) then
+        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
+        for _, d in ipairs(deployables:GetChildren()) do
+            local n = d.Name:lower()
+            if n:find("plant box") or n:find("farm") or n:find("bush") or n:find("crop") then
+                local p = getRootPart(d)
+                if p and (root.Position - p.Position).Magnitude <= Config.PlantRange then
+                    if RemoteInteractStructure then
+                        RemoteInteractStructure:FireServer(d, "Harvest")
+                        RemoteInteractStructure:FireServer(d, "Plant")
+                    end
+                end
+            end
+        end
+        lastPlantTime = now
+    end
+
+    -- Auto Process --
+    if Config.AutoProcess and root and (now - lastProcessTime >= 2.0) then
+        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
+        for _, d in ipairs(deployables:GetChildren()) do
+            local n = d.Name:lower()
+            if n:find("campfire") or n:find("furnace") or n:find("cauldron") or n:find("fire") then
+                local p = getRootPart(d)
+                if p and (root.Position - p.Position).Magnitude <= 25 then
+                    if RemoteInteractStructure then
+                        RemoteInteractStructure:FireServer(d, "Cook")
+                    end
+                end
+            end
+        end
+        lastProcessTime = now
+    end
+
+    -- Auto Chest --
+    if Config.AutoChest and root and (now - lastChestTime >= 1.0) then
+        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
+        for _, d in ipairs(deployables:GetChildren()) do
+            local n = d.Name:lower()
+            if n:find("chest") or n:find("crate") or n:find("box") then
+                local p = getRootPart(d)
+                if p then
+                    local dist = (root.Position - p.Position).Magnitude
+                    if dist <= Config.ChestRange then
+                        if RemoteInteractStructure then
+                            RemoteInteractStructure:FireServer(d, "Open")
+                            SessionStats.ChestsOpened = SessionStats.ChestsOpened + 1
+                        end
+                    end
+                end
+            end
+        end
+        lastChestTime = now
+    end
+
+    -- Auto Fishing --
+    if Config.AutoFishing and (now - lastFishingTime >= (Config.FishingDelay or 2)) then
+        if RemoteFishing then
+            pcall(function() RemoteFishing:FireServer() end)
+        end
+        lastFishingTime = now
+    end
+
+    -- Auto Chat --
+    if Config.ChatMessages and (now - lastChatTime >= (Config.ChatInterval or 30)) then
+        local chatService = game:GetService("Chat")
+        if chatService and Config.ChatText then
+            pcall(function()
+                chatService:Chat(LocalPlayer.Character, Config.ChatText, Enum.ChatColor.Blue)
+            end)
+        end
+        lastChatTime = now
+    end
+
+    -- Fullbright --
+    if Config.Fullbright then
+        Lighting.Ambient = Color3.new(1, 1, 1)
+        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+        Lighting.Brightness = 2
+    end
+
+    -- No Fog --
+    if Config.NoFog then
+        Lighting.FogEnd = 100000
+        if atmosphere then atmosphere.Density = 0 end
+    end
+
+    -- Disable Particles --
+    if Config.DisableParticles then
+        for _, p in ipairs(Workspace:GetDescendants()) do
+            if p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") then
+                p.Enabled = false
+            end
+        end
+    end
+end))
+
+-- ESP Update Loop --
+task.spawn(function()
+    while mainFrame.Parent do
+        task.wait(0.5)
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+
+        if root then
+            -- Player ESP --
+            if not Config.ESPPlayers then
+                clearESPCategory("player_")
+            else
+                local playersFolder = Workspace:FindFirstChild("Players")
+                if playersFolder then
+                    for _, pChar in ipairs(playersFolder:GetChildren()) do
+                        if pChar ~= char then
+                            local pRoot = pChar:FindFirstChild("HumanoidRootPart")
+                            local hum = pChar:FindFirstChildOfClass("Humanoid")
+                            if pRoot and hum and hum.Health > 0 then
+                                local dist = (root.Position - pRoot.Position).Magnitude
+                                if dist <= Config.ESPDistance then
+                                    local text = ""
+                                    if Config.ESPNames then text = text .. pChar.Name end
+                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                    getOrCreateESP("player_" .. pChar.Name, pRoot, text, Colors.AccentRed)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Critter ESP --
+            if not Config.ESPCritters then
+                clearESPCategory("critter_")
+            else
+                local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+                if critters then
+                    for _, c in ipairs(critters:GetChildren()) do
+                        local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("HumanoidRootPart") or
+                            getRootPart(c)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= Config.ESPDistance then
+                                local text = Config.ESPNames and c.Name or ""
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                getOrCreateESP("critter_" .. c:GetDebugId(), p, text, Colors.AccentOrange)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Resource ESP --
+            if not Config.ESPResources then
+                clearESPCategory("res_")
+            else
+                forEachResource(function(obj)
+                    local n = obj.Name:lower()
+                    if n:find("tree") or n:find("rock") or n:find("ore") or n:find("crystal") or n:find("gold") or n:find("iron") or n:find("stone") or n:find("bush") then
+                        local p = obj:IsA("BasePart") and obj or getRootPart(obj)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= Config.ESPDistance then
+                                local col = n:find("crystal") and Colors.AccentPurple or
+                                    (n:find("ore") and Colors.AccentYellow or Colors.AccentGreen)
+                                local text = Config.ESPNames and obj.Name or ""
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                getOrCreateESP("res_" .. obj:GetDebugId(), p, text, col)
+                            end
+                        end
+                    end
+                end)
+            end
+
+            -- Item ESP --
+            if not Config.ESPItems then
+                clearESPCategory("item_")
+            else
+                local items = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or Workspace
+                for _, it in ipairs(items:GetChildren()) do
+                    if it:IsA("Model") or it:IsA("BasePart") then
+                        local n = it.Name:lower()
+                        if n:find("bag") or n:find("meat") or n:find("ore") or n:find("wood") or n:find("bar") or n:find("potion") or n:find("sword") then
+                            local p = it:IsA("BasePart") and it or getRootPart(it)
+                            if p then
+                                local dist = (root.Position - p.Position).Magnitude
+                                if dist <= Config.ESPDistance then
+                                    local text = Config.ESPNames and it.Name or ""
+                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                    getOrCreateESP("item_" .. it:GetDebugId(), p, text, Colors.BluePrimary)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Chest ESP --
+            if not Config.ESPChests then
+                clearESPCategory("chest_")
+            else
+                local deployables = Workspace:FindFirstChild("Deployables") or Workspace
+                for _, d in ipairs(deployables:GetChildren()) do
+                    local n = d.Name:lower()
+                    if n:find("chest") or n:find("crate") or n:find("box") then
+                        local p = getRootPart(d)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= Config.ESPDistance then
+                                local text = Config.ESPNames and d.Name or ""
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                getOrCreateESP("chest_" .. d:GetDebugId(), p, text, Colors.AccentYellow)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Trader ESP --
+            if not Config.ESPTraders then
+                clearESPCategory("trader_")
+            else
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    local n = obj.Name:lower()
+                    if n:find("trader") or n:find("merchant") or n:find("shop") then
+                        local p = getRootPart(obj)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= Config.ESPDistance then
+                                local text = Config.ESPNames and ("Trader: " .. obj.Name) or ""
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                getOrCreateESP("trader_" .. obj:GetDebugId(), p, text, Colors.AccentGreen)
+                            end
+                        end
+                    end
+                end
+            end
+
+            -- Meteor ESP --
+            if not Config.ESPMeteors then
+                clearESPCategory("meteor_")
+            else
+                for _, obj in ipairs(Workspace:GetChildren()) do
+                    local n = obj.Name:lower()
+                    if n:find("meteor") or n:find("god rock") or n:find("godrock") or n:find("god bag") then
+                        local p = getRootPart(obj)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= Config.ESPDistance then
+                                local text = Config.ESPNames and ("RARE: " .. obj.Name) or ""
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                getOrCreateESP("meteor_" .. obj:GetDebugId(), p, text, Colors.AccentPink)
+                                if Config.RareItemAlert and dist <= 120 then
+                                    SendNotification("Identical", "Rare Spawn In Reach: " .. obj.Name, 2, "⭐")
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Anti-AFK --
+LocalPlayer.Idled:Connect(function()
+    if Config.AntiAFK then
+        local VirtualUser = game:GetService("VirtualUser")
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new(0, 0))
+    end
+end)
+
+-- Welcome Notification --
+SendNotification("Identical v3.0", "Loaded successfully! Press Left-CTRL to toggle menu.", 3, "✅")
+
+-- Gradient Animation for Border --
+task.spawn(function()
+    local angle = 0
+    while mainFrame.Parent do
+        angle = angle + 1
+        if angle >= 360 then angle = 0 end
+        if mainGradient then
+            mainGradient.Rotation = angle
+        end
+        task.wait(0.05)
+    end
+end)
