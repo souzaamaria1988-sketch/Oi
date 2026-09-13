@@ -1,6 +1,6 @@
 --==================================================================--
--- GodsAndPlayersESP - Booga Booga (v5)
--- Sintaxe 100% conservadora: sem +=, sem caracteres especiais.
+-- GodsAndPlayersESP - Booga Booga (v6 - com AUTO MINE)
+-- Sintaxe conservadora: sem +=, sem continue, sem caracteres especiais.
 -- Execute pelo executor. Atalho da UI: Right Shift
 --==================================================================--
 
@@ -52,6 +52,20 @@ local Settings = {
     PlayerColor = Color3.fromRGB(80, 255, 170),
     PlayerTeamColor = true,
     PlayerMaxDist = 5000,
+
+    -- Auto minerar
+    AutoMine = false,
+    AutoMineMethod = "Input",
+    AutoMineMinInstances = 15,
+    AutoMineMaxDist = 25,
+    AutoMineHoldTime = 6,
+    AutoMineRetryDelay = 8,
+    AutoMineRemoteDelay = 0.4,
+    AutoMineEquipTool = true,
+    AutoMineStopMove = true,
+    AutoMineGods = true,
+    AutoMinePreferGods = true,
+    AutoMineUseTouch = true,
 }
 
 local GODS_LIST = {
@@ -116,7 +130,7 @@ local function track(conn)
 end
 
 --============================--
--- Destroi todos os GodBeacon deixados pela versao antiga
+-- Destroi GodBeacons da versao antiga
 --============================--
 task.spawn(function()
     local descendants = Workspace:GetDescendants()
@@ -790,7 +804,6 @@ local function UpdatePlayerHeavy(player, data, cam)
         end
     end
 
-    -- esconde elementos cujo toggle foi desligado (sem esperar o proximo frame)
     if data.boxShown and not Settings.PlayerBox2D then
         data.boxShown = false
         data.box2d.Visible = false
@@ -890,7 +903,507 @@ local function ClearPlayersESP()
 end
 
 --============================--
--- Cache de players (eventos, sem alocacao por frame)
+-- AUTO MINERAR - Camada de entrada simulada
+--============================--
+local VIM = nil
+do
+    local ok = pcall(function()
+        VIM = game:GetService("VirtualInputManager")
+    end)
+    if not ok then
+        VIM = nil
+    end
+end
+
+local LastPressX = 0
+local LastPressY = 0
+
+local function MineInputDown(x, y)
+    LastPressX = x
+    LastPressY = y
+    local used = false
+    if VIM then
+        local ok = pcall(function()
+            VIM:SendMouseButtonEvent(x, y, 0, true, game, 0)
+        end)
+        used = ok
+        if Settings.AutoMineUseTouch then
+            pcall(function()
+                VIM:SendTouchEvent(1, x, y, Enum.UserInputState.Begin, game, 0)
+            end)
+        end
+    end
+    if not used then
+        if type(mouse1press) == "function" then
+            pcall(mouse1press)
+        end
+    end
+end
+
+local function MineInputUp(x, y)
+    if VIM then
+        pcall(function()
+            VIM:SendMouseButtonEvent(x, y, 0, false, game, 0)
+        end)
+        if Settings.AutoMineUseTouch then
+            pcall(function()
+                VIM:SendTouchEvent(1, x, y, Enum.UserInputState.End, game, 0)
+            end)
+        end
+    end
+    if not VIM then
+        if type(mouse1release) == "function" then
+            pcall(mouse1release)
+        end
+    end
+end
+
+local function MineInputUpdate(x, y)
+    if VIM and Settings.AutoMineUseTouch then
+        pcall(function()
+            VIM:SendTouchEvent(1, x, y, Enum.UserInputState.Update, game, 0)
+        end)
+    end
+end
+
+local function ReleaseMovementKeys()
+    if not VIM then
+        return
+    end
+    local keys = {
+        Enum.KeyCode.W, Enum.KeyCode.A, Enum.KeyCode.S, Enum.KeyCode.D,
+        Enum.KeyCode.Up, Enum.KeyCode.Down, Enum.KeyCode.Left, Enum.KeyCode.Right,
+    }
+    for i = 1, #keys do
+        pcall(function()
+            VIM:SendKeyEvent(false, keys[i], false, game, 0)
+        end)
+    end
+end
+
+local function AutoEquipTool()
+    local char = LocalPlayer.Character
+    if not char then
+        return
+    end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        return
+    end
+    if char:FindFirstChildOfClass("Tool") then
+        return
+    end
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if not backpack then
+        return
+    end
+    local tools = backpack:GetChildren()
+    local best = nil
+    for i = 1, #tools do
+        local tool = tools[i]
+        if tool:IsA("Tool") then
+            local n = string.lower(tool.Name)
+            if string.find(n, "pick", 1, true) or string.find(n, "axe", 1, true) or string.find(n, "maul", 1, true) then
+                best = tool
+                break
+            end
+            if not best then
+                best = tool
+            end
+        end
+    end
+    if best then
+        pcall(function()
+            humanoid:EquipTool(best)
+        end)
+    end
+end
+
+--============================--
+-- AUTO MINERAR - Mira da camera
+--============================--
+local AimPos = nil
+local AimBound = false
+
+local function BindAim()
+    if AimBound then
+        return
+    end
+    AimBound = true
+    pcall(function()
+        RunService:BindToRenderStep("ESP_AutoMine_Aim", Enum.RenderPriority.Camera.Value + 1, function()
+            if not AimPos then
+                return
+            end
+            pcall(function()
+                local cam = Workspace.CurrentCamera
+                if cam then
+                    local origin = cam.CFrame.Position
+                    local dir = AimPos - origin
+                    if dir.Magnitude > 0.5 then
+                        cam.CFrame = CFrame.lookAt(origin, AimPos)
+                    end
+                end
+            end)
+        end)
+    end)
+end
+
+local function UnbindAim()
+    if not AimBound then
+        return
+    end
+    AimBound = false
+    pcall(function()
+        RunService:UnbindFromRenderStep("ESP_AutoMine_Aim")
+    end)
+end
+
+--============================--
+-- AUTO MINERAR - Escolha de alvo
+--============================--
+local MineBlacklist = {}
+local RESOURCE_FOLDER_NAMES = { "Resources", "Resource", "Nodes", "Ores" }
+
+local function GetInstCenter(inst)
+    if inst:IsA("BasePart") then
+        return inst.Position
+    end
+    if inst:IsA("Model") then
+        local pp = inst.PrimaryPart
+        if pp and pp.Parent then
+            return pp.Position
+        end
+        local base = inst:FindFirstChildWhichIsA("BasePart", true)
+        if base then
+            return base.Position
+        end
+    end
+    return nil
+end
+
+local function FindMineTarget(rootPos, now)
+    local folders = {}
+    for i = 1, #RESOURCE_FOLDER_NAMES do
+        local f = Workspace:FindFirstChild(RESOURCE_FOLDER_NAMES[i])
+        if f then
+            folders[#folders + 1] = f
+        end
+    end
+    if #folders == 0 then
+        return nil
+    end
+
+    local counts = {}
+    local candidates = {}
+    for f = 1, #folders do
+        local children = folders[f]:GetChildren()
+        for i = 1, #children do
+            local child = children[i]
+            if child:IsA("Model") or child:IsA("BasePart") then
+                counts[child.Name] = (counts[child.Name] or 0) + 1
+                candidates[#candidates + 1] = child
+            end
+        end
+    end
+
+    local bestGod = nil
+    local bestGodDist = Settings.AutoMineMaxDist
+    local bestRes = nil
+    local bestResDist = Settings.AutoMineMaxDist
+
+    for i = 1, #candidates do
+        local cand = candidates[i]
+        local bl = MineBlacklist[cand]
+        if bl ~= nil and bl < now then
+            MineBlacklist[cand] = nil
+            bl = nil
+        end
+        if bl == nil then
+            local pos = GetInstCenter(cand)
+            if pos then
+                local d = (pos - rootPos).Magnitude
+                if IsGodName(cand.Name) then
+                    if Settings.AutoMineGods and d < bestGodDist then
+                        bestGodDist = d
+                        bestGod = cand
+                    end
+                else
+                    local nameCount = counts[cand.Name] or 0
+                    if nameCount >= Settings.AutoMineMinInstances and d < bestResDist then
+                        bestResDist = d
+                        bestRes = cand
+                    end
+                end
+            end
+        end
+    end
+
+    if bestGod then
+        if Settings.AutoMinePreferGods or bestGodDist <= bestResDist or not bestRes then
+            return bestGod
+        end
+    end
+    return bestRes
+end
+
+--============================--
+-- AUTO MINERAR - Spy do Remote (ByteNetReliable)
+--============================--
+local RemoteSpyData = {
+    remote = nil,
+    original = nil,
+    hooked = false,
+    armed = false,
+    lastArgs = nil,
+    hasArgs = false,
+}
+
+local function FindByteNetRemote()
+    local rs = game:GetService("ReplicatedStorage")
+    local found = rs:FindFirstChild("ByteNetReliable", true)
+    if not found then
+        found = Workspace:FindFirstChild("ByteNetReliable", true)
+    end
+    if found then
+        RemoteSpyData.remote = found
+        return found
+    end
+    return nil
+end
+
+local function PackArgs(...)
+    local t = { ... }
+    t.n = select("#", ...)
+    return t
+end
+
+local function InstallRemoteSpy()
+    if RemoteSpyData.hooked then
+        return true
+    end
+    if type(hookmetamethod) ~= "function" or type(getnamecallmethod) ~= "function" then
+        return false
+    end
+    local remote = RemoteSpyData.remote or FindByteNetRemote()
+    if not remote then
+        return false
+    end
+
+    local oldNamecall = nil
+    local hookFunc = function(self, ...)
+        local method = getnamecallmethod()
+        if method == "FireServer" and self == remote then
+            pcall(function()
+                RemoteSpyData.lastArgs = PackArgs(...)
+                RemoteSpyData.hasArgs = true
+                if RemoteSpyData.armed then
+                    RemoteSpyData.armed = false
+                    local args = RemoteSpyData.lastArgs
+                    print("[AutoMine] Pacote capturado (" .. tostring(args.n) .. " argumentos):")
+                    for i = 1, args.n do
+                        local v = args[i]
+                        print("[AutoMine]   arg" .. i .. " = (" .. type(v) .. ") " .. tostring(v))
+                    end
+                end
+            end)
+        end
+        return oldNamecall(self, ...)
+    end
+
+    if type(newcclosure) == "function" then
+        pcall(function()
+            hookFunc = newcclosure(hookFunc)
+        end)
+    end
+
+    local ok = pcall(function()
+        oldNamecall = hookmetamethod(game, "__namecall", hookFunc)
+    end)
+    if ok then
+        RemoteSpyData.hooked = true
+        RemoteSpyData.original = oldNamecall
+        return true
+    end
+    return false
+end
+
+local function UninstallRemoteSpy()
+    if not RemoteSpyData.hooked then
+        return
+    end
+    RemoteSpyData.hooked = false
+    RemoteSpyData.armed = false
+    pcall(function()
+        if RemoteSpyData.original and type(hookmetamethod) == "function" then
+            hookmetamethod(game, "__namecall", RemoteSpyData.original)
+        end
+    end)
+end
+
+local function RemoteMineStep()
+    local remote = RemoteSpyData.remote or FindByteNetRemote()
+    if not remote then
+        return false
+    end
+    if not RemoteSpyData.hasArgs or not RemoteSpyData.lastArgs then
+        return false
+    end
+    local args = RemoteSpyData.lastArgs
+    local ok = pcall(function()
+        if table.unpack then
+            remote:FireServer(table.unpack(args, 1, args.n))
+        else
+            remote:FireServer(unpack(args, 1, args.n))
+        end
+    end)
+    return ok
+end
+
+--============================--
+-- AUTO MINERAR - Ciclo principal
+--============================--
+local AutoMineRunning = false
+
+local function AutoMineCycle()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return 1
+    end
+
+    local now = os.clock()
+    local target = FindMineTarget(root.Position, now)
+    if not target then
+        return 1
+    end
+
+    local targetPos = GetInstCenter(target)
+    if not targetPos then
+        MineBlacklist[target] = os.clock() + 3
+        return 0.5
+    end
+
+    if Settings.AutoMineEquipTool then
+        AutoEquipTool()
+    end
+    if Settings.AutoMineStopMove then
+        ReleaseMovementKeys()
+    end
+
+    AimPos = targetPos
+    BindAim()
+    task.wait(0.2)
+
+    local cam = Workspace.CurrentCamera
+    if not cam then
+        AimPos = nil
+        UnbindAim()
+        return 0.5
+    end
+
+    local sp = cam:WorldToViewportPoint(targetPos)
+    local cx = sp.X
+    local cy = sp.Y
+    local vw = cam.ViewportSize.X
+    local vh = cam.ViewportSize.Y
+    if cx < 2 then
+        cx = 2
+    elseif cx > vw - 2 then
+        cx = vw - 2
+    end
+    if cy < 2 then
+        cy = 2
+    elseif cy > vh - 2 then
+        cy = vh - 2
+    end
+
+    if Settings.GodDebug then
+        print("[AutoMine] Minerando: " .. target.Name .. " (" .. string.format("%.0fm", (targetPos - root.Position).Magnitude) .. ")")
+    end
+
+    MineInputDown(cx, cy)
+
+    local deadline = os.clock() + Settings.AutoMineHoldTime
+    while AutoMineRunning and Active and os.clock() < deadline do
+        if not target.Parent then
+            break
+        end
+        MineInputUpdate(cx, cy)
+        task.wait(0.15)
+    end
+
+    MineInputUp(cx, cy)
+    local mined = not target.Parent
+    if not mined then
+        MineBlacklist[target] = os.clock() + Settings.AutoMineRetryDelay
+    end
+
+    AimPos = nil
+
+    if mined then
+        return 0.25
+    end
+    return 0.6
+end
+
+local function StartAutoMine()
+    if AutoMineRunning then
+        return
+    end
+    AutoMineRunning = true
+
+    if Settings.AutoMineMethod == "Remote" then
+        local okSpy = InstallRemoteSpy()
+        if not okSpy then
+            print("[AutoMine] Modo Remote indisponivel (sem hookmetamethod ou remote nao achado). Usando Input.")
+            Settings.AutoMineMethod = "Input"
+        end
+    end
+
+    task.spawn(function()
+        local hintShown = false
+        while AutoMineRunning and Active do
+            local waitTime = 1
+            local ok, err = pcall(function()
+                if Settings.AutoMineMethod == "Remote" then
+                    if RemoteSpyData.hasArgs then
+                        RemoteMineStep()
+                        waitTime = Settings.AutoMineRemoteDelay
+                    else
+                        if not hintShown then
+                            hintShown = true
+                            print("[AutoMine] Modo Remote: nenhum pacote capturado. Use o botao de captura e mine 1x manualmente.")
+                        end
+                        waitTime = 1
+                    end
+                else
+                    waitTime = AutoMineCycle()
+                end
+            end)
+            if not ok then
+                warn("[AutoMine] Erro: " .. tostring(err))
+                waitTime = 1
+            end
+            task.wait(waitTime)
+        end
+        MineInputUp(LastPressX, LastPressY)
+        AimPos = nil
+        UnbindAim()
+        AutoMineRunning = false
+    end)
+end
+
+local function StopAutoMine()
+    AutoMineRunning = false
+    AimPos = nil
+    UnbindAim()
+    MineInputUp(LastPressX, LastPressY)
+    table.clear(MineBlacklist)
+end
+
+--============================--
+-- Cache de players
 --============================--
 track(Players.PlayerAdded:Connect(function(p)
     if p ~= LocalPlayer then
@@ -916,7 +1429,7 @@ for i = 1, #existing do
 end
 
 --============================--
--- Deteccao de deuses por evento (custo quase zero)
+-- Deteccao de deuses por evento
 --============================--
 track(Workspace.DescendantAdded:Connect(function(inst)
     if Active and Settings.GodsESP then
@@ -925,7 +1438,7 @@ track(Workspace.DescendantAdded:Connect(function(inst)
 end))
 
 --============================--
--- Loop principal
+-- Loop principal (ESP)
 --============================--
 local LastGodTick = 0
 
@@ -973,10 +1486,13 @@ track(RunService.RenderStepped:Connect(function()
 end))
 
 --============================--
--- Cleanup completo (usado ao reexecutar ou pelo botao de destruir)
+-- Cleanup completo
 --============================--
 local function FullCleanup()
     Active = false
+    StopAutoMine()
+    UninstallRemoteSpy()
+
     for i = 1, #Connections do
         pcall(function() Connections[i]:Disconnect() end)
     end
@@ -1013,7 +1529,7 @@ genv.GodsPlayersESP_Destroy = FullCleanup
 --============================--
 local Window = Rayfield:CreateWindow({
     Name = "Gods & Players ESP",
-    Subtitle = "Booga Booga v5",
+    Subtitle = "Booga Booga v6",
     Icon = 13641909418,
     SidebarLayout = true,
     DisableBuildWarnings = true,
@@ -1068,27 +1584,10 @@ GodsTab:CreateButton({
         StartGodScan()
     end,
 })
-GodsTab:CreateButton({
-    Name = "Listar objetos com 'god' no nome (ver console)",
-    Callback = function()
-        task.spawn(function()
-            local count = 0
-            local descendants = Workspace:GetDescendants()
-            for i = 1, #descendants do
-                local inst = descendants[i]
-                if string.find(string.lower(inst.Name), "god", 1, true) then
-                    count = count + 1
-                    print("[GodESP] " .. inst:GetFullName() .. " (" .. inst.ClassName .. ")")
-                end
-            end
-            print("[GodESP] Total de objetos com 'god' no nome: " .. count)
-        end)
-    end,
-})
 
 AddText(GodsTab, {
     Title = "Performance",
-    Content = "O highlight e o billboard seguem o deus sozinhos; as checagens rodam 6 vezes por segundo. Novos deuses sao detectados por evento, instantaneamente.",
+    Content = "O highlight e o billboard seguem o deus sozinhos; as checagens rodam 6 vezes por segundo. Novos deuses sao detectados por evento.",
 })
 
 -- ===== TAB: PLAYERS =====
@@ -1125,13 +1624,95 @@ PlayersTab:CreateToggle({ Name = "Usar Cor do Time", CurrentValue = Settings.Pla
 PlayersTab:CreateColorPicker({ Name = "Cor Padrao", Color = Settings.PlayerColor, Flag = "PlayerColor", Callback = function(v) Settings.PlayerColor = v end })
 PlayersTab:CreateSlider({ Name = "Distancia Maxima", Range = {100, 10000}, Increment = 100, CurrentValue = Settings.PlayerMaxDist, Flag = "PlayerMaxDist", Callback = function(v) Settings.PlayerMaxDist = v end })
 
-local skeletonNote
-if DrawingSupported then
-    skeletonNote = "Chams, nome, vida e Box 3D custam quase zero. So Box 2D, Healthbar e Skeleton rodam por frame, e o Skeleton e o mais pesado."
-else
-    skeletonNote = "Aviso: este executor NAO tem a biblioteca Drawing, entao o Skeleton nao funciona. O resto do ESP funciona normalmente."
-end
-AddText(PlayersTab, { Title = "Performance", Content = skeletonNote })
+-- ===== TAB: AUTO MINE =====
+local MineTab = Window:CreateTab({ Name = "Auto Mine", Icon = 4779510615 })
+
+MineTab:CreateSection("Controle")
+MineTab:CreateToggle({
+    Name = "Ativar Auto Minerar",
+    CurrentValue = Settings.AutoMine,
+    Flag = "AutoMine",
+    Callback = function(v)
+        Settings.AutoMine = v
+        if v then
+            StartAutoMine()
+        else
+            StopAutoMine()
+        end
+    end,
+})
+
+MineTab:CreateSection("Metodo")
+MineTab:CreateDropdown({
+    Name = "Metodo de mineracao",
+    Options = { "Input (clique simulado)", "Remote (experimental)" },
+    CurrentOption = { "Input (clique simulado)" },
+    Flag = "AutoMineMethodSel",
+    Callback = function(Option)
+        local v = Option
+        if type(v) == "table" then
+            v = v[1]
+        end
+        if v == "Remote (experimental)" then
+            Settings.AutoMineMethod = "Remote"
+            if Settings.AutoMine then
+                InstallRemoteSpy()
+            end
+        else
+            Settings.AutoMineMethod = "Input"
+        end
+    end,
+})
+
+MineTab:CreateButton({
+    Name = "Capturar pacote do Remote (mine 1x depois)",
+    Callback = function()
+        local okSpy = InstallRemoteSpy()
+        if not okSpy then
+            print("[AutoMine] Captura falhou: executor sem hookmetamethod ou ByteNetReliable nao encontrado.")
+            return
+        end
+        RemoteSpyData.armed = true
+        print("[AutoMine] Armado. Agora va no jogo e MINE algo 1x manualmente. O pacote sera capturado no console.")
+    end,
+})
+
+MineTab:CreateSection("Filtros")
+MineTab:CreateSlider({
+    Name = "Minimo de instancias do recurso (na pasta)",
+    Range = { 1, 100 },
+    Increment = 1,
+    CurrentValue = Settings.AutoMineMinInstances,
+    Flag = "AutoMineMinInstances",
+    Callback = function(v)
+        Settings.AutoMineMinInstances = v
+    end,
+})
+MineTab:CreateSlider({
+    Name = "Distancia maxima para minerar",
+    Range = { 5, 100 },
+    Increment = 1,
+    CurrentValue = Settings.AutoMineMaxDist,
+    Flag = "AutoMineMaxDist",
+    Callback = function(v)
+        Settings.AutoMineMaxDist = v
+    end,
+})
+MineTab:CreateToggle({ Name = "Minerar Deuses tambem", CurrentValue = Settings.AutoMineGods, Flag = "AutoMineGods", Callback = function(v) Settings.AutoMineGods = v end })
+MineTab:CreateToggle({ Name = "Priorizar Deuses quando existirem", CurrentValue = Settings.AutoMinePreferGods, Flag = "AutoMinePreferGods", Callback = function(v) Settings.AutoMinePreferGods = v end })
+
+MineTab:CreateSection("Ajustes")
+MineTab:CreateSlider({ Name = "Tempo maximo segurando o clique (s)", Range = { 1, 15 }, Increment = 1, CurrentValue = Settings.AutoMineHoldTime, Flag = "AutoMineHoldTime", Callback = function(v) Settings.AutoMineHoldTime = v end })
+MineTab:CreateSlider({ Name = "Esperar antes de repetir recurso falho (s)", Range = { 2, 30 }, Increment = 1, CurrentValue = Settings.AutoMineRetryDelay, Flag = "AutoMineRetryDelay", Callback = function(v) Settings.AutoMineRetryDelay = v end })
+MineTab:CreateSlider({ Name = "Intervalo do modo Remote (s)", Range = { 0.1, 2 }, Increment = 0.1, CurrentValue = Settings.AutoMineRemoteDelay, Flag = "AutoMineRemoteDelay", Callback = function(v) Settings.AutoMineRemoteDelay = v end })
+MineTab:CreateToggle({ Name = "Equipar ferramenta automaticamente", CurrentValue = Settings.AutoMineEquipTool, Flag = "AutoMineEquipTool", Callback = function(v) Settings.AutoMineEquipTool = v end })
+MineTab:CreateToggle({ Name = "Parar movimento ao minerar", CurrentValue = Settings.AutoMineStopMove, Flag = "AutoMineStopMove", Callback = function(v) Settings.AutoMineStopMove = v end })
+MineTab:CreateToggle({ Name = "Usar toque de celular (alem do mouse)", CurrentValue = Settings.AutoMineUseTouch, Flag = "AutoMineUseTouch", Callback = function(v) Settings.AutoMineUseTouch = v end })
+
+AddText(MineTab, {
+    Title = "Como funciona",
+    Content = "MODO INPUT (recomendado): mira a camera no recurso mais perto, solta as teclas de movimento e simula o clique/toque SEGURADO na tela. A animacao de minerar toca normal. O script NAO anda: fique perto dos recursos e feche este menu (Right Shift) antes de ativar, senao o clique pode acertar a interface. So minera tipos de recurso com o minimo de instancias definido (ex: 15). Deuses sao minados a parte se ativado. MODO REMOTE (experimental): o Booga Booga usa protocolo binario proprio (ByteNet), entao disparar o remote direto pode nao funcionar; use o botao de captura, mine 1x manualmente e o script repete o pacote.",
+})
 
 -- ===== TAB: MISC =====
 local MiscTab = Window:CreateTab({ Name = "Misc", Icon = 4779510615 })
@@ -1181,10 +1762,16 @@ track(UserInputService.InputBegan:Connect(function(input, processed)
     end
 end))
 
--- Scan inicial caso a config salva venha com o God ESP ligado
+--============================--
+-- Inicializacao
+--============================--
 if Settings.GodsESP then
     StartGodScan()
 end
+if Settings.AutoMine then
+    StartAutoMine()
+end
 
-print("[GodsAndPlayersESP v5] Carregado com sucesso.")
+print("[GodsAndPlayersESP v6] Carregado com sucesso.")
 print("[ESP] Atalho da interface: Right Shift")
+print("[AutoMine] Modo Input: mira + clique/toque segurado (com animacao). Modo Remote: use a captura de pacote.")
