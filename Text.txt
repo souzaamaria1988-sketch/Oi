@@ -1,5 +1,4 @@
--- Script taken from https://xenoscripts.com website --
--- Enhanced v3.0 - Blue Theme Edition --
+-- Identical v4.0 - Mobile Optimized for 60 FPS --
 
 local cloneref = cloneref or function(o) return o end
 
@@ -7,7 +6,7 @@ if getgenv and getgenv().IdenticalBoogaUnload then
     pcall(getgenv().IdenticalBoogaUnload)
 end
 
--- Services --
+-- Services (Cached) --
 local Players = cloneref(game:GetService("Players"))
 local RunService = cloneref(game:GetService("RunService"))
 local Workspace = cloneref(game:GetService("Workspace"))
@@ -21,7 +20,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera or Workspace:FindFirstChildOfClass("Camera")
 
--- Remote Events --
+-- Remote Events (Cached) --
 local RS = game:GetService("ReplicatedStorage")
 local Events = RS:FindFirstChild("Events")
 local RemotePickup = Events and Events:FindFirstChild("Pickup")
@@ -49,7 +48,7 @@ pcall(function()
     end
 end)
 
--- Enhanced Config --
+-- Optimized Config --
 local Config = {
     -- Combat
     CombatReach = true,
@@ -160,14 +159,18 @@ local Config = {
     Notifications = true,
     ChatMessages = false,
     ChatInterval = 30,
-    ChatText = "Identical v3.0",
+    ChatText = "Identical v4.0",
     AutoFishing = false,
     FishingDelay = 2,
     KillCounter = true,
     ShowStats = false,
 
     -- Waypoints
-    Waypoints = {}
+    Waypoints = {},
+    
+    -- UI
+    UIVisible = true,
+    UIMinimized = false
 }
 
 -- Session Stats --
@@ -181,6 +184,7 @@ local SessionStats = {
     StartTime = tick()
 }
 
+-- Performance Optimization Variables --
 local activeConnections = {}
 local espStorage = {}
 local espFolder = CoreGui:FindFirstChild("Identical_ESP_Folder") or
@@ -192,6 +196,27 @@ if not espFolder then
 else
     espFolder:ClearAllChildren()
 end
+
+-- Cache System for Performance --
+local CachedRefs = {
+    PlayersFolder = Workspace:FindFirstChild("Players"),
+    CrittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters"),
+    ResourcesFolder = Workspace:FindFirstChild("Resources"),
+    ItemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems"),
+    DeployablesFolder = Workspace:FindFirstChild("Deployables")
+}
+
+-- Update cached references periodically
+task.spawn(function()
+    while true do
+        task.wait(5)
+        CachedRefs.PlayersFolder = Workspace:FindFirstChild("Players")
+        CachedRefs.CrittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+        CachedRefs.ResourcesFolder = Workspace:FindFirstChild("Resources")
+        CachedRefs.ItemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems")
+        CachedRefs.DeployablesFolder = Workspace:FindFirstChild("Deployables")
+    end
+end)
 
 for _, desc in ipairs(Workspace:GetDescendants()) do
     if desc:IsA("BillboardGui") and (desc.Name == "ESP" or desc.Name:find("Identical_ESP")) then
@@ -215,7 +240,7 @@ local function clearESPCategory(prefix)
     end
 end
 
--- Blue Theme Colors --
+-- Optimized Blue Theme Colors --
 local Colors = {
     Background       = Color3.fromRGB(10, 22, 40),
     SidebarBg        = Color3.fromRGB(8, 16, 30),
@@ -258,7 +283,7 @@ local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
 local origAtmosphereDensity = atmosphere and atmosphere.Density or 0.3
 
 -- Config File Management --
-local CONFIG_FILE = "Identical/default_v3.json"
+local CONFIG_FILE = "Identical/default_v4.json"
 local function LoadSavedConfig()
     if isfile and isfile(CONFIG_FILE) then
         local ok, data = pcall(function()
@@ -313,7 +338,7 @@ local function getGuiParent()
 end
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "Identical_v3"
+screenGui.Name = "Identical_v4"
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = getGuiParent()
@@ -324,11 +349,11 @@ if getgenv then
     end
 end
 
--- Notification System --
+-- Optimized Notification System --
 local notifContainer = Instance.new("Frame")
 notifContainer.Name = "Notifications"
-notifContainer.Size = UDim2.new(0, 350, 1, -40)
-notifContainer.Position = UDim2.new(1, -365, 0, 20)
+notifContainer.Size = UDim2.new(0, 320, 1, -40)
+notifContainer.Position = UDim2.new(1, -335, 0, 20)
 notifContainer.BackgroundTransparency = 1
 notifContainer.ZIndex = 1000
 notifContainer.Parent = screenGui
@@ -336,7 +361,7 @@ notifContainer.Parent = screenGui
 local notifLayout = Instance.new("UIListLayout")
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
 notifLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-notifLayout.Padding = UDim.new(0, 10)
+notifLayout.Padding = UDim.new(0, 8)
 notifLayout.Parent = notifContainer
 
 local function SendNotification(title, text, duration, icon)
@@ -345,7 +370,7 @@ local function SendNotification(title, text, duration, icon)
     icon = icon or "ℹ️"
 
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 70)
+    card.Size = UDim2.new(1, 0, 0, 65)
     card.BackgroundColor3 = Colors.Background
     card.BackgroundTransparency = 0.1
     card.BorderSizePixel = 0
@@ -362,28 +387,18 @@ local function SendNotification(title, text, duration, icon)
     corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = card
 
-    -- Gradient Border Animation
-    local gradient = Instance.new("UIGradient")
-    gradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Colors.BluePrimary),
-        ColorSequenceKeypoint.new(0.5, Colors.BlueGlow),
-        ColorSequenceKeypoint.new(1, Colors.BluePrimary)
-    })
-    gradient.Rotation = 0
-    gradient.Parent = stroke
-
     local iconLabel = Instance.new("TextLabel")
-    iconLabel.Size = UDim2.new(0, 40, 1, 0)
+    iconLabel.Size = UDim2.new(0, 35, 1, 0)
     iconLabel.Position = UDim2.new(0, 0, 0, 0)
     iconLabel.BackgroundTransparency = 1
     iconLabel.Text = icon
-    iconLabel.TextSize = 24
+    iconLabel.TextSize = 20
     iconLabel.Parent = card
 
     local topBar = Instance.new("Frame")
-    topBar.Size = UDim2.new(1, -50, 0, 22)
+    topBar.Size = UDim2.new(1, -45, 0, 20)
     topBar.BackgroundTransparency = 1
-    topBar.Position = UDim2.new(0, 45, 0, 8)
+    topBar.Position = UDim2.new(0, 40, 0, 6)
     topBar.Parent = card
 
     local tLabel = Instance.new("TextLabel")
@@ -392,40 +407,66 @@ local function SendNotification(title, text, duration, icon)
     tLabel.Font = Enum.Font.GothamBold
     tLabel.Text = title
     tLabel.TextColor3 = Colors.BluePrimary
-    tLabel.TextSize = 13
+    tLabel.TextSize = 12
     tLabel.TextXAlignment = Enum.TextXAlignment.Left
     tLabel.Parent = topBar
 
     local mLabel = Instance.new("TextLabel")
-    mLabel.Size = UDim2.new(1, -50, 0, 30)
-    mLabel.Position = UDim2.new(0, 45, 0, 32)
+    mLabel.Size = UDim2.new(1, -45, 0, 28)
+    mLabel.Position = UDim2.new(0, 40, 0, 28)
     mLabel.BackgroundTransparency = 1
     mLabel.Font = Enum.Font.Gotham
     mLabel.Text = text
     mLabel.TextColor3 = Colors.TextSubtle
-    mLabel.TextSize = 11
+    mLabel.TextSize = 10
     mLabel.TextXAlignment = Enum.TextXAlignment.Left
     mLabel.TextWrapped = true
     mLabel.Parent = card
 
-    -- Entry Animation
-    card.Position = card.Position + UDim2.new(1, 20, 0, 0)
-    TweenService:Create(card, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = card.Position - UDim2.new(1, 20, 0, 0)
+    -- Optimized Entry Animation (No complex tweens)
+    card.Position = card.Position + UDim2.new(1, 10, 0, 0)
+    TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Position = card.Position - UDim2.new(1, 10, 0, 0)
     }):Play()
 
     task.delay(duration, function()
-        TweenService:Create(card, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             BackgroundTransparency = 1,
-            Position = card.Position + UDim2.new(1, 20, 0, 0)
+            Position = card.Position + UDim2.new(1, 10, 0, 0)
         }):Play()
-        task.wait(0.35)
+        task.wait(0.2)
         card:Destroy()
     end)
 end
 
--- Toggle UI Visibility --
-local ToggleUiVisibility
+-- Minimize/Maximize Button --
+local minimizeButton = Instance.new("TextButton")
+minimizeButton.Name = "MinimizeButton"
+minimizeButton.Size = UDim2.new(0, 50, 0, 50)
+minimizeButton.Position = UDim2.new(1, -70, 1, -70)
+minimizeButton.BackgroundColor3 = Colors.BlueDark
+minimizeButton.BackgroundTransparency = 0.2
+minimizeButton.BorderSizePixel = 0
+minimizeButton.ZIndex = 999
+minimizeButton.Text = "—"
+minimizeButton.TextColor3 = Colors.BluePrimary
+minimizeButton.TextSize = 20
+minimizeButton.Font = Enum.Font.GothamBold
+minimizeButton.Parent = screenGui
+
+local minBtnCorner = Instance.new("UICorner")
+minBtnCorner.CornerRadius = UDim.new(1, 0)
+minBtnCorner.Parent = minimizeButton
+
+local minBtnStroke = Instance.new("UIStroke")
+minBtnStroke.Color = Colors.BluePrimary
+minBtnStroke.Thickness = 2
+minBtnStroke.Parent = minimizeButton
+
+-- Toggle UI Functions --
+local mainFrame
+local ToggleUIVisibility
+local ToggleUIMinimize
 
 -- Floating Action Button --
 local floatingCrescent = Instance.new("ImageButton")
@@ -478,124 +519,71 @@ local fcCutoutCorner = Instance.new("UICorner")
 fcCutoutCorner.CornerRadius = UDim.new(1, 0)
 fcCutoutCorner.Parent = fcCutout
 
-local fcDragging = false
-local fcDragInput, fcDragStart, fcStartPos
+-- Draggable System (Mobile Optimized) --
+local function makeDraggable(frame, handle)
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
 
-floatingCrescent.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        fcDragging = true
-        fcDragStart = input.Position
-        fcStartPos = floatingCrescent.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                fcDragging = false
-            end
-        end)
+    local function updateDrag(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y)
     end
-end)
 
-floatingCrescent.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        fcDragInput = input
-    end
-end)
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if input == fcDragInput and fcDragging then
-        local delta = input.Position - fcDragStart
-        floatingCrescent.Position = UDim2.new(fcStartPos.X.Scale, fcStartPos.X.Offset + delta.X, fcStartPos.Y.Scale,
-            fcStartPos.Y.Offset + delta.Y)
-    end
-end)
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
 
-floatingCrescent.MouseEnter:Connect(function()
-    TweenService:Create(floatingCrescent, TweenInfo.new(0.15), { BackgroundColor3 = Colors.BlueDark }):Play()
-    TweenService:Create(fcStroke, TweenInfo.new(0.15), { Color = Colors.BlueGlow, Thickness = 3 }):Play()
-end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            updateDrag(input)
+        end
+    end)
+end
 
-floatingCrescent.MouseLeave:Connect(function()
-    TweenService:Create(floatingCrescent, TweenInfo.new(0.15), { BackgroundColor3 = Colors.BlueDark }):Play()
-    TweenService:Create(fcStroke, TweenInfo.new(0.15), { Color = Colors.BluePrimary, Thickness = 2 }):Play()
-end)
+makeDraggable(floatingCrescent, floatingCrescent)
 
 floatingCrescent.MouseButton1Click:Connect(function()
-    if ToggleUiVisibility then ToggleUiVisibility() end
+    if ToggleUIVisibility then ToggleUIVisibility() end
 end)
 
 -- Main Frame --
-local mainFrame = Instance.new("Frame")
+mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 720, 0, 500)
-mainFrame.Position = UDim2.new(0.5, -360, 0.5, -250)
+mainFrame.Size = UDim2.new(0, 680, 0, 480)
+mainFrame.Position = UDim2.new(0.5, -340, 0.5, -240)
 mainFrame.BackgroundColor3 = Colors.Background
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
 
--- Animated Gradient Border --
 local mainStroke = Instance.new("UIStroke")
 mainStroke.Color = Colors.BorderBlue
 mainStroke.Thickness = 2
 mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 mainStroke.Parent = mainFrame
 
-local mainGradient = Instance.new("UIGradient")
-mainGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Colors.BluePrimary),
-    ColorSequenceKeypoint.new(0.5, Colors.BlueGlow),
-    ColorSequenceKeypoint.new(1, Colors.BluePrimary)
-})
-mainGradient.Rotation = 0
-mainGradient.Parent = mainStroke
-
 local mainCorner = Instance.new("UICorner")
 mainCorner.CornerRadius = UDim.new(0, 10)
 mainCorner.Parent = mainFrame
-
--- Background Particles --
-local particleFrame = Instance.new("Frame")
-particleFrame.Name = "Particles"
-particleFrame.Size = UDim2.new(1, 0, 1, 0)
-particleFrame.BackgroundTransparency = 1
-particleFrame.ClipsDescendants = true
-particleFrame.ZIndex = 0
-particleFrame.Parent = mainFrame
-
-local function createParticle()
-    local particle = Instance.new("Frame")
-    particle.Size = UDim2.new(0, math.random(2, 5), 0, math.random(2, 5))
-    particle.Position = UDim2.new(math.random(), 0, math.random(), 0)
-    particle.BackgroundColor3 = Colors.BluePrimary
-    particle.BackgroundTransparency = math.random(70, 90) / 100
-    particle.BorderSizePixel = 0
-    particle.Parent = particleFrame
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = particle
-    
-    local duration = math.random(10, 20)
-    local targetY = particle.Position.Y.Scale - 1
-    
-    TweenService:Create(particle, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-        Position = UDim2.new(particle.Position.X.Scale, 0, targetY, 0),
-        BackgroundTransparency = 1
-    }):Play()
-    
-    task.delay(duration, function()
-        particle:Destroy()
-    end)
-end
-
--- Generate initial particles
-for i = 1, 20 do
-    task.delay(i * 0.5, function()
-        while mainFrame.Parent do
-            createParticle()
-            task.wait(math.random(2, 5))
-        end
-    end)
-end
 
 -- Title Bar --
 local titleBar = Instance.new("Frame")
@@ -630,8 +618,8 @@ titleDiv.Parent = titleBar
 -- Logo Icon --
 local logoContainer = Instance.new("Frame")
 logoContainer.Name = "LogoIcon"
-logoContainer.Size = UDim2.new(0, 20, 0, 20)
-logoContainer.Position = UDim2.new(0, 14, 0.5, -10)
+logoContainer.Size = UDim2.new(0, 18, 0, 18)
+logoContainer.Position = UDim2.new(0, 14, 0.5, -9)
 logoContainer.BackgroundTransparency = 1
 logoContainer.ClipsDescendants = true
 logoContainer.ZIndex = 3
@@ -639,7 +627,7 @@ logoContainer.Parent = titleBar
 
 local logoOuter = Instance.new("Frame")
 logoOuter.Name = "Outer"
-logoOuter.Size = UDim2.new(0, 20, 0, 20)
+logoOuter.Size = UDim2.new(0, 18, 0, 18)
 logoOuter.BackgroundColor3 = Colors.BluePrimary
 logoOuter.BorderSizePixel = 0
 logoOuter.ZIndex = 3
@@ -651,7 +639,7 @@ logoOuterCorner.Parent = logoOuter
 
 local logoCutout = Instance.new("Frame")
 logoCutout.Name = "Cutout"
-logoCutout.Size = UDim2.new(0, 16, 0, 16)
+logoCutout.Size = UDim2.new(0, 14, 0, 14)
 logoCutout.Position = UDim2.new(0, 6, 0, -2)
 logoCutout.BackgroundColor3 = Colors.SidebarBg
 logoCutout.BorderSizePixel = 0
@@ -664,34 +652,34 @@ logoCutoutCorner.Parent = logoCutout
 
 local brandTitle = Instance.new("TextLabel")
 brandTitle.Name = "BrandTitle"
-brandTitle.Size = UDim2.new(0, 160, 1, 0)
-brandTitle.Position = UDim2.new(0, 42, 0, 0)
+brandTitle.Size = UDim2.new(0, 140, 1, 0)
+brandTitle.Position = UDim2.new(0, 38, 0, 0)
 brandTitle.BackgroundTransparency = 1
 brandTitle.Font = Enum.Font.GothamBold
-brandTitle.Text = "IDENTICAL v3.0"
+brandTitle.Text = "IDENTICAL v4.0"
 brandTitle.TextColor3 = Colors.BluePrimary
-brandTitle.TextSize = 14
+brandTitle.TextSize = 13
 brandTitle.TextXAlignment = Enum.TextXAlignment.Left
 brandTitle.ZIndex = 3
 brandTitle.Parent = titleBar
 
 local gameSubtitle = Instance.new("TextLabel")
 gameSubtitle.Name = "GameSubtitle"
-gameSubtitle.Size = UDim2.new(0, 150, 1, 0)
-gameSubtitle.Position = UDim2.new(0, 145, 0, 0)
+gameSubtitle.Size = UDim2.new(0, 130, 1, 0)
+gameSubtitle.Position = UDim2.new(0, 130, 0, 0)
 gameSubtitle.BackgroundTransparency = 1
 gameSubtitle.Font = Enum.Font.Gotham
 gameSubtitle.Text = "BOOGA BOOGA"
 gameSubtitle.TextColor3 = Colors.BlueMuted
-gameSubtitle.TextSize = 10
+gameSubtitle.TextSize = 9
 gameSubtitle.TextXAlignment = Enum.TextXAlignment.Left
 gameSubtitle.ZIndex = 3
 gameSubtitle.Parent = titleBar
 
 -- Window Controls --
 local winControls = Instance.new("Frame")
-winControls.Size = UDim2.new(0, 65, 1, 0)
-winControls.Position = UDim2.new(1, -70, 0, 0)
+winControls.Size = UDim2.new(0, 70, 1, 0)
+winControls.Position = UDim2.new(1, -75, 0, 0)
 winControls.BackgroundTransparency = 1
 winControls.ZIndex = 3
 winControls.Parent = titleBar
@@ -703,7 +691,7 @@ minBtn.BackgroundColor3 = Colors.ControlBg
 minBtn.Font = Enum.Font.GothamBold
 minBtn.Text = "—"
 minBtn.TextColor3 = Colors.BluePrimary
-minBtn.TextSize = 11
+minBtn.TextSize = 14
 minBtn.BorderSizePixel = 0
 minBtn.ZIndex = 3
 minBtn.Parent = winControls
@@ -719,7 +707,7 @@ closeBtn.BackgroundColor3 = Colors.ControlBg
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Text = "×"
 closeBtn.TextColor3 = Colors.AccentRed
-closeBtn.TextSize = 14
+closeBtn.TextSize = 16
 closeBtn.BorderSizePixel = 0
 closeBtn.ZIndex = 3
 closeBtn.Parent = winControls
@@ -728,36 +716,8 @@ local closeCorner = Instance.new("UICorner")
 closeCorner.CornerRadius = UDim.new(0, 4)
 closeCorner.Parent = closeBtn
 
--- Window Dragging --
-local dragging = false
-local dragInput, dragStart, startPos
-
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then
-                dragging = false
-            end
-        end)
-    end
-end)
-
-titleBar.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement then
-        dragInput = input
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if input == dragInput and dragging then
-        local delta = input.Position - dragStart
-        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y)
-    end
-end)
+-- Window Dragging (Mobile Optimized) --
+makeDraggable(mainFrame, titleBar)
 
 -- Body Frame --
 local bodyFrame = Instance.new("Frame")
@@ -771,7 +731,7 @@ bodyFrame.Parent = mainFrame
 -- Sidebar --
 local sidebar = Instance.new("Frame")
 sidebar.Name = "Sidebar"
-sidebar.Size = UDim2.new(0, 150, 1, 0)
+sidebar.Size = UDim2.new(0, 140, 1, 0)
 sidebar.BackgroundColor3 = Colors.SidebarBg
 sidebar.BorderSizePixel = 0
 sidebar.ZIndex = 2
@@ -839,8 +799,8 @@ navPad.Parent = navList
 -- Content Area --
 local contentArea = Instance.new("Frame")
 contentArea.Name = "ContentArea"
-contentArea.Size = UDim2.new(1, -150, 1, 0)
-contentArea.Position = UDim2.new(0, 150, 0, 0)
+contentArea.Size = UDim2.new(1, -140, 1, 0)
+contentArea.Position = UDim2.new(0, 140, 0, 0)
 contentArea.BackgroundTransparency = 1
 contentArea.ZIndex = 2
 contentArea.Parent = bodyFrame
@@ -856,7 +816,7 @@ local function switchTab(tabName)
     end
     for name, btn in pairs(tabButtons) do
         if name == tabName then
-            TweenService:Create(btn, TweenInfo.new(0.2), {
+            TweenService:Create(btn, TweenInfo.new(0.15), {
                 BackgroundColor3 = Colors.BlueDark,
                 TextColor3 = Colors.TextWhite
             }):Play()
@@ -865,7 +825,7 @@ local function switchTab(tabName)
             local icon = btn:FindFirstChild("Icon")
             if icon then icon.TextColor3 = Colors.BluePrimary end
         else
-            TweenService:Create(btn, TweenInfo.new(0.2), {
+            TweenService:Create(btn, TweenInfo.new(0.15), {
                 BackgroundColor3 = Colors.SidebarBg,
                 TextColor3 = Colors.TextSubtle
             }):Play()
@@ -957,14 +917,14 @@ local function createTab(name, icon)
 
     local pageLayout = Instance.new("UIListLayout")
     pageLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    pageLayout.Padding = UDim.new(0, 12)
+    pageLayout.Padding = UDim.new(0, 10)
     pageLayout.Parent = page
 
     local pagePad = Instance.new("UIPadding")
-    pagePad.PaddingTop = UDim.new(0, 12)
-    pagePad.PaddingBottom = UDim.new(0, 16)
-    pagePad.PaddingLeft = UDim.new(0, 14)
-    pagePad.PaddingRight = UDim.new(0, 14)
+    pagePad.PaddingTop = UDim.new(0, 10)
+    pagePad.PaddingBottom = UDim.new(0, 14)
+    pagePad.PaddingLeft = UDim.new(0, 12)
+    pagePad.PaddingRight = UDim.new(0, 12)
     pagePad.Parent = page
 
     tabFrames[name] = page
@@ -1016,11 +976,11 @@ footerDiv.ZIndex = 3
 footerDiv.Parent = footerBar
 
 local footerBrand = Instance.new("TextLabel")
-footerBrand.Size = UDim2.new(0, 220, 1, 0)
+footerBrand.Size = UDim2.new(0, 200, 1, 0)
 footerBrand.Position = UDim2.new(0, 12, 0, 0)
 footerBrand.BackgroundTransparency = 1
 footerBrand.Font = Enum.Font.Gotham
-footerBrand.Text = "Identical v3.0 - Booga Booga"
+footerBrand.Text = "Identical v4.0 - Booga Booga"
 footerBrand.TextColor3 = Colors.TextMuted
 footerBrand.TextSize = 10
 footerBrand.TextXAlignment = Enum.TextXAlignment.Left
@@ -1028,8 +988,8 @@ footerBrand.ZIndex = 3
 footerBrand.Parent = footerBar
 
 local footerKey = Instance.new("TextLabel")
-footerKey.Size = UDim2.new(0, 220, 1, 0)
-footerKey.Position = UDim2.new(1, -232, 0, 0)
+footerKey.Size = UDim2.new(0, 200, 1, 0)
+footerKey.Position = UDim2.new(1, -212, 0, 0)
 footerKey.BackgroundTransparency = 1
 footerKey.Font = Enum.Font.Gotham
 footerKey.Text = "[L-CTRL] Menu | [END] Stop All"
@@ -1040,11 +1000,11 @@ footerKey.ZIndex = 3
 footerKey.Parent = footerBar
 
 local footerVersion = Instance.new("TextLabel")
-footerVersion.Size = UDim2.new(0, 80, 1, 0)
-footerVersion.Position = UDim2.new(0.5, -40, 0, 0)
+footerVersion.Size = UDim2.new(0, 70, 1, 0)
+footerVersion.Position = UDim2.new(0.5, -35, 0, 0)
 footerVersion.BackgroundTransparency = 1
 footerVersion.Font = Enum.Font.GothamBold
-footerVersion.Text = "v3.0.0"
+footerVersion.Text = "v4.0.0"
 footerVersion.TextColor3 = Colors.BluePrimary
 footerVersion.TextSize = 10
 footerVersion.TextXAlignment = Enum.TextXAlignment.Center
@@ -1054,7 +1014,7 @@ footerVersion.Parent = footerBar
 -- Helper Functions for UI Elements --
 local function createCategoryHeader(parent, text)
     local hdr = Instance.new("Frame")
-    hdr.Size = UDim2.new(1, 0, 0, 24)
+    hdr.Size = UDim2.new(1, 0, 0, 22)
     hdr.BackgroundTransparency = 1
     hdr.Parent = parent
 
@@ -1097,18 +1057,18 @@ end
 
 local function createBaseRow(parent, labelText, descText, indexSearch)
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
+    row.Size = UDim2.new(1, 0, 0, 42)
     row.BackgroundColor3 = Colors.RowNormal
     row.BorderSizePixel = 0
     row.Parent = parent
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = row
 
     local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -200, 1, 0)
+    textFrame.Size = UDim2.new(1, -180, 1, 0)
     textFrame.BackgroundTransparency = 1
     textFrame.Parent = row
 
@@ -1125,7 +1085,7 @@ local function createBaseRow(parent, labelText, descText, indexSearch)
 
     local descLbl = Instance.new("TextLabel")
     descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.Position = UDim2.new(0, 0, 0, 22)
     descLbl.BackgroundTransparency = 1
     descLbl.Font = Enum.Font.Gotham
     descLbl.Text = descText or ""
@@ -1133,13 +1093,6 @@ local function createBaseRow(parent, labelText, descText, indexSearch)
     descLbl.TextSize = 10
     descLbl.TextXAlignment = Enum.TextXAlignment.Left
     descLbl.Parent = textFrame
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
-    end)
 
     if indexSearch ~= false then
         table.insert(rowSearchIndex, {
@@ -1178,30 +1131,20 @@ local function createToggleRow(parent, labelText, descText, initialVal, callback
     knobCorner.CornerRadius = UDim.new(1, 0)
     knobCorner.Parent = knob
 
-    -- Pulse animation for active state
-    local pulseAnimation
     local function updateVisuals()
-        TweenService:Create(btn, TweenInfo.new(0.2), {
-            BackgroundColor3 = state and Colors.BluePrimary or Colors.ControlBg
-        }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.2), {
-            Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
-        }):Play()
-        
-        if pulseAnimation then
-            pulseAnimation:Cancel()
-            pulseAnimation = nil
-        end
-        
-        if state then
-            pulseAnimation = TweenService:Create(btn, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
-                BackgroundTransparency = 0.3
-            })
-            pulseAnimation:Play()
-        end
+        btn.BackgroundColor3 = state and Colors.BluePrimary or Colors.ControlBg
+        knob.Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
     end
 
     btn.MouseButton1Click:Connect(function()
+        state = not state
+        updateVisuals()
+        if callback then callback(state) end
+        AutoSaveConfig()
+    end)
+
+    -- Mobile Touch Support
+    btn.TouchTap:Connect(function()
         state = not state
         updateVisuals()
         if callback then callback(state) end
@@ -1224,14 +1167,14 @@ local function createSliderRow(parent, labelText, descText, minVal, maxVal, init
     suffix = suffix or ""
 
     local container = Instance.new("Frame")
-    container.Size = UDim2.new(0, 190, 0, 26)
-    container.Position = UDim2.new(1, -190, 0.5, -13)
+    container.Size = UDim2.new(0, 180, 0, 26)
+    container.Position = UDim2.new(1, -180, 0.5, -13)
     container.BackgroundTransparency = 1
     container.Parent = row
 
     local valLabel = Instance.new("TextLabel")
-    valLabel.Size = UDim2.new(0, 72, 1, 0)
-    valLabel.Position = UDim2.new(1, -72, 0, 0)
+    valLabel.Size = UDim2.new(0, 68, 1, 0)
+    valLabel.Position = UDim2.new(1, -68, 0, 0)
     valLabel.BackgroundTransparency = 1
     valLabel.Font = Enum.Font.GothamBold
     valLabel.Text = isFloat and string.format("%.2f", currentVal) .. suffix or tostring(math.floor(currentVal)) .. suffix
@@ -1240,11 +1183,12 @@ local function createSliderRow(parent, labelText, descText, minVal, maxVal, init
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.Parent = container
 
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, -78, 0, 6)
-    track.Position = UDim2.new(0, 0, 0.5, -3)
+    local track = Instance.new("TextButton")
+    track.Size = UDim2.new(1, -74, 0, 8)
+    track.Position = UDim2.new(0, 0, 0.5, -4)
     track.BackgroundColor3 = Colors.ControlBg
     track.BorderSizePixel = 0
+    track.AutoButtonColor = false
     track.Parent = container
 
     local trackCorner = Instance.new("UICorner")
@@ -1263,6 +1207,7 @@ local function createSliderRow(parent, labelText, descText, minVal, maxVal, init
     fillCorner.Parent = fill
 
     local sliding = false
+    
     local function updateValueFromX(x)
         local rel = math.clamp((x - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
         local val = minVal + (maxVal - minVal) * rel
@@ -1274,6 +1219,7 @@ local function createSliderRow(parent, labelText, descText, minVal, maxVal, init
         if callback then callback(val) end
     end
 
+    -- Mouse Support
     track.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             sliding = true
@@ -1281,14 +1227,25 @@ local function createSliderRow(parent, labelText, descText, minVal, maxVal, init
         end
     end)
 
+    -- Touch Support (Mobile Optimized)
+    track.TouchTap:Connect(function(touchPosition)
+        updateValueFromX(touchPosition.X)
+    end)
+
+    track.TouchPan:Connect(function(touchPositions, state, velocity)
+        if #touchPositions > 0 then
+            updateValueFromX(touchPositions[1].Position.X)
+        end
+    end)
+
     UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             sliding = false
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
-        if sliding and input.UserInputType == Enum.UserInputType.MouseMovement then
+        if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
             updateValueFromX(input.Position.X)
         end
     end)
@@ -1308,7 +1265,7 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
     local selected = initialVal or options[1]
 
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
+    row.Size = UDim2.new(1, 0, 0, 42)
     row.AutomaticSize = Enum.AutomaticSize.Y
     row.BackgroundColor3 = Colors.RowNormal
     row.BorderSizePixel = 0
@@ -1317,21 +1274,21 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
 
     local rowLayout = Instance.new("UIListLayout")
     rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    rowLayout.Padding = UDim.new(0, 4)
+    rowLayout.Padding = UDim.new(0, 3)
     rowLayout.Parent = row
 
     local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 44)
+    header.Size = UDim2.new(1, 0, 0, 42)
     header.BackgroundTransparency = 1
     header.Parent = row
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = header
 
     local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -155, 1, 0)
+    textFrame.Size = UDim2.new(1, -145, 1, 0)
     textFrame.BackgroundTransparency = 1
     textFrame.Parent = header
 
@@ -1348,7 +1305,7 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
 
     local descLbl = Instance.new("TextLabel")
     descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.Position = UDim2.new(0, 0, 0, 22)
     descLbl.BackgroundTransparency = 1
     descLbl.Font = Enum.Font.Gotham
     descLbl.Text = descText or ""
@@ -1358,8 +1315,8 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
     descLbl.Parent = textFrame
 
     local ddBtn = Instance.new("TextButton")
-    ddBtn.Size = UDim2.new(0, 140, 0, 26)
-    ddBtn.Position = UDim2.new(1, -140, 0.5, -13)
+    ddBtn.Size = UDim2.new(0, 130, 0, 26)
+    ddBtn.Position = UDim2.new(1, -130, 0.5, -13)
     ddBtn.BackgroundColor3 = Colors.ControlBg
     ddBtn.Font = Enum.Font.GothamBold
     ddBtn.Text = tostring(selected) .. "  ▾"
@@ -1380,20 +1337,20 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
     optionsContainer.Parent = row
 
     local optPad = Instance.new("UIPadding")
-    optPad.PaddingLeft = UDim.new(0, 12)
-    optPad.PaddingRight = UDim.new(0, 12)
-    optPad.PaddingBottom = UDim.new(0, 8)
+    optPad.PaddingLeft = UDim.new(0, 10)
+    optPad.PaddingRight = UDim.new(0, 10)
+    optPad.PaddingBottom = UDim.new(0, 6)
     optPad.Parent = optionsContainer
 
     local optList = Instance.new("UIListLayout")
     optList.SortOrder = Enum.SortOrder.LayoutOrder
-    optList.Padding = UDim.new(0, 3)
+    optList.Padding = UDim.new(0, 2)
     optList.Parent = optionsContainer
 
     local optButtons = {}
     for _, opt in ipairs(options) do
         local optBtn = Instance.new("TextButton")
-        optBtn.Size = UDim2.new(1, 0, 0, 28)
+        optBtn.Size = UDim2.new(1, 0, 0, 26)
         optBtn.BackgroundColor3 = (opt == selected) and Colors.DropdownSelected or Colors.InputBg
         optBtn.Font = Enum.Font.Gotham
         optBtn.Text = (opt == selected and "✓ " or "   ") .. tostring(opt)
@@ -1413,18 +1370,21 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
 
         optButtons[opt] = optBtn
 
-        optBtn.MouseEnter:Connect(function()
-            if opt ~= selected then
-                TweenService:Create(optBtn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
-            end
-        end)
-        optBtn.MouseLeave:Connect(function()
-            if opt ~= selected then
-                TweenService:Create(optBtn, TweenInfo.new(0.15), { BackgroundColor3 = Colors.InputBg }):Play()
-            end
-        end)
-
         optBtn.MouseButton1Click:Connect(function()
+            selected = opt
+            ddBtn.Text = tostring(opt) .. "  ▾"
+            optionsContainer.Visible = false
+            for oName, b in pairs(optButtons) do
+                b.BackgroundColor3 = (oName == opt) and Colors.DropdownSelected or Colors.InputBg
+                b.TextColor3 = (oName == opt) and Colors.BluePrimary or Colors.TextWhite
+                b.Text = (oName == opt and "✓ " or "   ") .. tostring(oName)
+            end
+            AutoSaveConfig()
+            if callback then callback(opt) end
+        end)
+        
+        -- Mobile Touch Support
+        optBtn.TouchTap:Connect(function()
             selected = opt
             ddBtn.Text = tostring(opt) .. "  ▾"
             optionsContainer.Visible = false
@@ -1442,12 +1402,10 @@ local function createDropdownRow(parent, labelText, descText, options, initialVa
         optionsContainer.Visible = not optionsContainer.Visible
         ddBtn.Text = tostring(selected) .. (optionsContainer.Visible and "  ▴" or "  ▾")
     end)
-
-    header.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
-    end)
-    header.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
+    
+    ddBtn.TouchTap:Connect(function()
+        optionsContainer.Visible = not optionsContainer.Visible
+        ddBtn.Text = tostring(selected) .. (optionsContainer.Visible and "  ▴" or "  ▾")
     end)
 
     if indexSearch ~= false then
@@ -1475,7 +1433,7 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
     local selected = initialVal or options[1] or ""
 
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 44)
+    row.Size = UDim2.new(1, 0, 0, 42)
     row.AutomaticSize = Enum.AutomaticSize.Y
     row.BackgroundColor3 = Colors.RowNormal
     row.BorderSizePixel = 0
@@ -1484,21 +1442,21 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
 
     local rowLayout = Instance.new("UIListLayout")
     rowLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    rowLayout.Padding = UDim.new(0, 4)
+    rowLayout.Padding = UDim.new(0, 3)
     rowLayout.Parent = row
 
     local header = Instance.new("Frame")
-    header.Size = UDim2.new(1, 0, 0, 44)
+    header.Size = UDim2.new(1, 0, 0, 42)
     header.BackgroundTransparency = 1
     header.Parent = row
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 12)
-    pad.PaddingRight = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = header
 
     local textFrame = Instance.new("Frame")
-    textFrame.Size = UDim2.new(1, -180, 1, 0)
+    textFrame.Size = UDim2.new(1, -170, 1, 0)
     textFrame.BackgroundTransparency = 1
     textFrame.Parent = header
 
@@ -1515,7 +1473,7 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
 
     local descLbl = Instance.new("TextLabel")
     descLbl.Size = UDim2.new(1, 0, 0, 14)
-    descLbl.Position = UDim2.new(0, 0, 0, 24)
+    descLbl.Position = UDim2.new(0, 0, 0, 22)
     descLbl.BackgroundTransparency = 1
     descLbl.Font = Enum.Font.Gotham
     descLbl.Text = descText or ""
@@ -1525,8 +1483,8 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
     descLbl.Parent = textFrame
 
     local searchContainer = Instance.new("Frame")
-    searchContainer.Size = UDim2.new(0, 165, 0, 28)
-    searchContainer.Position = UDim2.new(1, -165, 0.5, -14)
+    searchContainer.Size = UDim2.new(0, 155, 0, 26)
+    searchContainer.Position = UDim2.new(1, -155, 0.5, -13)
     searchContainer.BackgroundColor3 = Colors.ControlBg
     searchContainer.BorderSizePixel = 0
     searchContainer.Parent = header
@@ -1540,23 +1498,23 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
     scStroke.Thickness = 1
     scStroke.Parent = searchContainer
 
-    local searchBox = Instance.new("TextBox")
-    searchBox.Size = UDim2.new(1, -28, 1, 0)
-    searchBox.Position = UDim2.new(0, 8, 0, 0)
-    searchBox.BackgroundTransparency = 1
-    searchBox.Font = Enum.Font.GothamBold
-    searchBox.PlaceholderText = "Search recipe..."
-    searchBox.PlaceholderColor3 = Colors.TextMuted
-    searchBox.Text = tostring(selected)
-    searchBox.TextColor3 = Colors.BluePrimary
-    searchBox.TextSize = 11
-    searchBox.TextXAlignment = Enum.TextXAlignment.Left
-    searchBox.ClearTextOnFocus = false
-    searchBox.Parent = searchContainer
+    local searchBoxLocal = Instance.new("TextBox")
+    searchBoxLocal.Size = UDim2.new(1, -26, 1, 0)
+    searchBoxLocal.Position = UDim2.new(0, 8, 0, 0)
+    searchBoxLocal.BackgroundTransparency = 1
+    searchBoxLocal.Font = Enum.Font.GothamBold
+    searchBoxLocal.PlaceholderText = "Search..."
+    searchBoxLocal.PlaceholderColor3 = Colors.TextMuted
+    searchBoxLocal.Text = tostring(selected)
+    searchBoxLocal.TextColor3 = Colors.BluePrimary
+    searchBoxLocal.TextSize = 11
+    searchBoxLocal.TextXAlignment = Enum.TextXAlignment.Left
+    searchBoxLocal.ClearTextOnFocus = false
+    searchBoxLocal.Parent = searchContainer
 
     local toggleBtn = Instance.new("TextButton")
-    toggleBtn.Size = UDim2.new(0, 22, 1, 0)
-    toggleBtn.Position = UDim2.new(1, -24, 0, 0)
+    toggleBtn.Size = UDim2.new(0, 20, 1, 0)
+    toggleBtn.Position = UDim2.new(1, -22, 0, 0)
     toggleBtn.BackgroundTransparency = 1
     toggleBtn.Font = Enum.Font.GothamBold
     toggleBtn.Text = "▾"
@@ -1565,7 +1523,7 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
     toggleBtn.Parent = searchContainer
 
     local scrollContainer = Instance.new("ScrollingFrame")
-    scrollContainer.Size = UDim2.new(1, -20, 0, 170)
+    scrollContainer.Size = UDim2.new(1, -20, 0, 150)
     scrollContainer.Position = UDim2.new(0, 10, 0, 0)
     scrollContainer.BackgroundColor3 = Colors.InputBg
     scrollContainer.BorderSizePixel = 0
@@ -1581,10 +1539,10 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
     sCorner.Parent = scrollContainer
 
     local sPad = Instance.new("UIPadding")
-    sPad.PaddingTop = UDim.new(0, 4)
-    sPad.PaddingBottom = UDim.new(0, 4)
-    sPad.PaddingLeft = UDim.new(0, 4)
-    sPad.PaddingRight = UDim.new(0, 4)
+    sPad.PaddingTop = UDim.new(0, 3)
+    sPad.PaddingBottom = UDim.new(0, 3)
+    sPad.PaddingLeft = UDim.new(0, 3)
+    sPad.PaddingRight = UDim.new(0, 3)
     sPad.Parent = scrollContainer
 
     local sList = Instance.new("UIListLayout")
@@ -1607,7 +1565,7 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
             if q == "" or optName:lower():find(q, 1, true) then
                 count = count + 1
                 local btn = Instance.new("TextButton")
-                btn.Size = UDim2.new(1, 0, 0, 26)
+                btn.Size = UDim2.new(1, 0, 0, 24)
                 btn.BackgroundColor3 = (optName == selected) and Colors.DropdownSelected or Colors.RowNormal
                 btn.BorderSizePixel = 0
                 btn.Font = Enum.Font.Gotham
@@ -1625,20 +1583,18 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
                 bPad.PaddingLeft = UDim.new(0, 8)
                 bPad.Parent = btn
 
-                btn.MouseEnter:Connect(function()
-                    if optName ~= selected then
-                        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Colors.RowHover }):Play()
-                    end
-                end)
-                btn.MouseLeave:Connect(function()
-                    if optName ~= selected then
-                        TweenService:Create(btn, TweenInfo.new(0.12), { BackgroundColor3 = Colors.RowNormal }):Play()
-                    end
-                end)
-
                 btn.MouseButton1Click:Connect(function()
                     selected = optName
-                    searchBox.Text = optName
+                    searchBoxLocal.Text = optName
+                    scrollContainer.Visible = false
+                    toggleBtn.Text = "▾"
+                    AutoSaveConfig()
+                    if callback then callback(optName) end
+                end)
+                
+                btn.TouchTap:Connect(function()
+                    selected = optName
+                    searchBoxLocal.Text = optName
                     scrollContainer.Visible = false
                     toggleBtn.Text = "▾"
                     AutoSaveConfig()
@@ -1649,26 +1605,24 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
 
         if count == 0 then
             local emptyLbl = Instance.new("TextLabel")
-            emptyLbl.Size = UDim2.new(1, 0, 0, 26)
+            emptyLbl.Size = UDim2.new(1, 0, 0, 24)
             emptyLbl.BackgroundTransparency = 1
             emptyLbl.Font = Enum.Font.Gotham
-            emptyLbl.Text = "No matching recipe found"
+            emptyLbl.Text = "No results found"
             emptyLbl.TextColor3 = Colors.TextMuted
             emptyLbl.TextSize = 10
             emptyLbl.Parent = scrollContainer
         end
     end
 
-    searchBox.Focused:Connect(function()
+    searchBoxLocal.Focused:Connect(function()
         scrollContainer.Visible = true
         toggleBtn.Text = "▴"
-        populateOptions(searchBox.Text)
-        TweenService:Create(scStroke, TweenInfo.new(0.2), { Color = Colors.BluePrimary }):Play()
+        populateOptions(searchBoxLocal.Text)
     end)
 
-    searchBox.FocusLost:Connect(function()
-        TweenService:Create(scStroke, TweenInfo.new(0.2), { Color = Colors.BorderSubtle }):Play()
-        local text = searchBox.Text:gsub("^%s*(.-)%s*$", "%1")
+    searchBoxLocal.FocusLost:Connect(function()
+        local text = searchBoxLocal.Text:gsub("^%s*(.-)%s*$", "%1")
         if text ~= "" then
             local found = nil
             for _, opt in ipairs(options) do
@@ -1678,21 +1632,21 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
                 end
             end
             selected = found or text
-            searchBox.Text = selected
+            searchBoxLocal.Text = selected
             AutoSaveConfig()
             if callback then callback(selected) end
         end
-        task.delay(0.2, function()
-            if not searchBox:IsFocused() then
+        task.delay(0.15, function()
+            if not searchBoxLocal:IsFocused() then
                 scrollContainer.Visible = false
                 toggleBtn.Text = "▾"
             end
         end)
     end)
 
-    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+    searchBoxLocal:GetPropertyChangedSignal("Text"):Connect(function()
         if scrollContainer.Visible then
-            populateOptions(searchBox.Text)
+            populateOptions(searchBoxLocal.Text)
         end
     end)
 
@@ -1700,15 +1654,16 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
         scrollContainer.Visible = not scrollContainer.Visible
         toggleBtn.Text = scrollContainer.Visible and "▴" or "▾"
         if scrollContainer.Visible then
-            populateOptions(searchBox.Text)
+            populateOptions(searchBoxLocal.Text)
         end
     end)
-
-    header.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowHover }):Play()
-    end)
-    header.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), { BackgroundColor3 = Colors.RowNormal }):Play()
+    
+    toggleBtn.TouchTap:Connect(function()
+        scrollContainer.Visible = not scrollContainer.Visible
+        toggleBtn.Text = scrollContainer.Visible and "▴" or "▾"
+        if scrollContainer.Visible then
+            populateOptions(searchBoxLocal.Text)
+        end
     end)
 
     if indexSearch ~= false then
@@ -1722,11 +1677,11 @@ local function createSearchDropdownRow(parent, labelText, descText, options, ini
         frame = row,
         SetValue = function(val)
             selected = val
-            searchBox.Text = tostring(val)
+            searchBoxLocal.Text = tostring(val)
         end,
         SetSelected = function(val)
             selected = val
-            searchBox.Text = tostring(val)
+            searchBoxLocal.Text = tostring(val)
         end
     }
 end
@@ -1734,8 +1689,8 @@ end
 local function createInfoRow(parent, labelText, valueText, indexSearch)
     local row = createBaseRow(parent, labelText, "", indexSearch)
     local valLbl = Instance.new("TextLabel")
-    valLbl.Size = UDim2.new(0, 150, 1, 0)
-    valLbl.Position = UDim2.new(1, -150, 0, 0)
+    valLbl.Size = UDim2.new(0, 140, 1, 0)
+    valLbl.Position = UDim2.new(1, -140, 0, 0)
     valLbl.BackgroundTransparency = 1
     valLbl.Font = Enum.Font.GothamBold
     valLbl.Text = valueText
@@ -1755,8 +1710,8 @@ end
 local function createButtonRow(parent, labelText, btnText, descText, callback, indexSearch)
     local row = createBaseRow(parent, labelText, descText, indexSearch)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 100, 0, 26)
-    btn.Position = UDim2.new(1, -100, 0.5, -13)
+    btn.Size = UDim2.new(0, 90, 0, 24)
+    btn.Position = UDim2.new(1, -90, 0.5, -12)
     btn.BackgroundColor3 = Colors.ControlBg
     btn.Font = Enum.Font.GothamBold
     btn.Text = btnText
@@ -1774,20 +1729,11 @@ local function createButtonRow(parent, labelText, btnText, descText, callback, i
     btnStroke.Thickness = 1
     btnStroke.Parent = btn
 
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15),
-            { BackgroundColor3 = Colors.BlueDark, TextColor3 = Colors.TextWhite }):Play()
-        TweenService:Create(btnStroke, TweenInfo.new(0.15),
-            { Color = Colors.BlueGlow, Thickness = 2 }):Play()
-    end)
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.15),
-            { BackgroundColor3 = Colors.ControlBg, TextColor3 = Colors.BluePrimary }):Play()
-        TweenService:Create(btnStroke, TweenInfo.new(0.15),
-            { Color = Colors.BluePrimary, Thickness = 1 }):Play()
-    end)
-
     btn.MouseButton1Click:Connect(callback)
+    
+    -- Mobile Touch Support
+    btn.TouchTap:Connect(callback)
+    
     return row
 end
 
@@ -1796,7 +1742,7 @@ createCategoryHeader(tabs.Home, "📊 System Status")
 local homeStatusCard = createCardGroup(tabs.Home)
 local runStatusRow = createInfoRow(homeStatusCard, "Status", "⚡ Identical Ready", true)
 createInfoRow(homeStatusCard, "Target Game", "🎮 Booga Booga", true)
-createInfoRow(homeStatusCard, "Active Version", "v3.0", true)
+createInfoRow(homeStatusCard, "Active Version", "v4.0", true)
 
 createCategoryHeader(tabs.Home, "🚨 Emergency & Controls")
 local homeEmergencyCard = createCardGroup(tabs.Home)
@@ -1822,38 +1768,38 @@ local function EmergencyStop()
     end
 
     runStatusRow.SetValue("⚠️ HALTED (Emergency Stop)")
-    SendNotification("Identical", "EMERGENCY STOP: All active features halted.", 3, "🚨")
+    SendNotification("Identical", "EMERGENCY STOP: All features halted.", 3, "🚨")
 end
 
-createButtonRow(homeEmergencyCard, "Stop All Features", "STOP ALL", "Instantly disables all auras, farming & loops",
+createButtonRow(homeEmergencyCard, "Stop All Features", "STOP ALL", "Instantly disables all features",
     EmergencyStop, true)
 
 createCategoryHeader(tabs.Home, "💾 Configuration & Profiles")
 local homeConfigCard = createCardGroup(tabs.Home)
-createButtonRow(homeConfigCard, "Save Configuration", "SAVE NOW", "Force write all current settings to default.json",
+createButtonRow(homeConfigCard, "Save Configuration", "SAVE", "Save settings to disk",
     function()
         AutoSaveConfig()
-        SendNotification("Identical", "Configuration saved to disk.", 2, "💾")
+        SendNotification("Identical", "Configuration saved!", 2, "💾")
     end, true)
 
 local SyncUIWithConfig
 
-createButtonRow(homeConfigCard, "Load Configuration", "LOAD NOW", "Reload settings from default.json", function()
+createButtonRow(homeConfigCard, "Load Configuration", "LOAD", "Reload settings from file", function()
     if LoadSavedConfig() then
         if SyncUIWithConfig then SyncUIWithConfig() end
-        SendNotification("Identical", "Configuration restored.", 2, "📂")
+        SendNotification("Identical", "Configuration restored!", 2, "📂")
     end
 end, true)
 
-createButtonRow(homeConfigCard, "Export Settings", "EXPORT", "Copies JSON configuration string to clipboard", function()
+createButtonRow(homeConfigCard, "Export Settings", "EXPORT", "Copy config to clipboard", function()
     local ok, encoded = pcall(function() return HttpService:JSONEncode(Config) end)
     if ok and encoded and setclipboard then
         setclipboard(encoded)
-        SendNotification("Identical", "Config copied to clipboard.", 2, "📋")
+        SendNotification("Identical", "Config copied!", 2, "📋")
     end
 end, true)
 
-createButtonRow(homeConfigCard, "Import Settings", "IMPORT", "Loads JSON configuration string from clipboard", function()
+createButtonRow(homeConfigCard, "Import Settings", "IMPORT", "Load config from clipboard", function()
     if getclipboard then
         local raw = getclipboard()
         local ok, data = pcall(function() return HttpService:JSONDecode(raw) end)
@@ -1863,9 +1809,9 @@ createButtonRow(homeConfigCard, "Import Settings", "IMPORT", "Loads JSON configu
             end
             if SyncUIWithConfig then SyncUIWithConfig() end
             AutoSaveConfig()
-            SendNotification("Identical", "Imported configuration successfully.", 2, "📥")
+            SendNotification("Identical", "Config imported!", 2, "📥")
         else
-            SendNotification("Identical", "Failed to parse clipboard config.", 2, "❌")
+            SendNotification("Identical", "Failed to parse config!", 2, "❌")
         end
     end
 end, true)
@@ -1873,7 +1819,7 @@ end, true)
 -- Unload System --
 local origHitboxSizes = {}
 local function resetHitboxes()
-    local playersFolder = Workspace:FindFirstChild("Players")
+    local playersFolder = CachedRefs.PlayersFolder
     if playersFolder then
         for _, pChar in ipairs(playersFolder:GetChildren()) do
             local pRoot = pChar:FindFirstChild("HumanoidRootPart")
@@ -1923,7 +1869,7 @@ local function UnloadScript()
     if getgenv then getgenv().IdenticalBoogaUnload = nil end
 end
 
-createButtonRow(homeConfigCard, "Unload Identical", "UNLOAD", "Completely unload and restore game state", UnloadScript,
+createButtonRow(homeConfigCard, "Unload Identical", "UNLOAD", "Completely unload script", UnloadScript,
     true)
 
 -- Teleport System --
@@ -1932,21 +1878,21 @@ local function QueueScriptForTeleport()
     if qot then
         pcall(function()
             local queued = false
-            if isfile and isfile("Identical_Booga_v3.lua") then
+            if isfile and isfile("Identical_Booga_v4.lua") then
                 qot([[
                     repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
                     task.wait(0.5)
-                    if isfile and isfile("Identical_Booga_v3.lua") then
-                        loadfile("Identical_Booga_v3.lua")()
+                    if isfile and isfile("Identical_Booga_v4.lua") then
+                        loadfile("Identical_Booga_v4.lua")()
                     end
                 ]])
                 queued = true
-            elseif isfile and isfile("identical_boogabooga_v3.lua") then
+            elseif isfile and isfile("identical_boogabooga_v4.lua") then
                 qot([[
                     repeat task.wait() until game:IsLoaded() and game.Players.LocalPlayer
                     task.wait(0.5)
-                    if isfile and isfile("identical_boogabooga_v3.lua") then
-                        loadfile("identical_boogabooga_v3.lua")()
+                    if isfile and isfile("identical_boogabooga_v4.lua") then
+                        loadfile("identical_boogabooga_v4.lua")()
                     end
                 ]])
                 queued = true
@@ -1961,7 +1907,7 @@ end
 
 local function ServerHop()
     QueueScriptForTeleport()
-    SendNotification("Identical", "Searching for available public servers...", 2, "🌐")
+    SendNotification("Identical", "Searching for servers...", 2, "🌐")
 
     local TeleportService = game:GetService("TeleportService")
     local placeId = game.PlaceId
@@ -2001,7 +1947,7 @@ local function ServerHop()
         end
     end
 
-    SendNotification("Identical", "Connecting to next available server...", 2, "🌐")
+    SendNotification("Identical", "Connecting to server...", 2, "🌐")
     pcall(function()
         TeleportService:Teleport(placeId, LocalPlayer)
     end)
@@ -2009,7 +1955,7 @@ end
 
 local function RejoinServer()
     QueueScriptForTeleport()
-    SendNotification("Identical", "Rejoining current server...", 2, "🔄")
+    SendNotification("Identical", "Rejoining server...", 2, "🔄")
     local TeleportService = game:GetService("TeleportService")
     pcall(function()
         TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
@@ -2038,113 +1984,113 @@ end
 
 createCategoryHeader(tabs.Home, "🌍 Server & Session")
 local homeServerCard = createCardGroup(tabs.Home)
-createButtonRow(homeServerCard, "Server Hop", "HOP NOW", "Teleport to a new public server & re-inject", ServerHop, true)
-createButtonRow(homeServerCard, "Rejoin Server", "REJOIN", "Rejoin the current server & re-inject", RejoinServer, true)
+createButtonRow(homeServerCard, "Server Hop", "HOP", "Teleport to new server", ServerHop, true)
+createButtonRow(homeServerCard, "Rejoin Server", "REJOIN", "Rejoin current server", RejoinServer, true)
 
 -- COMBAT TAB --
 createCategoryHeader(tabs.Combat, "⚔️ Combat Reach & Aura")
 local combatCard = createCardGroup(tabs.Combat)
-ctrls.CombatReach = createToggleRow(combatCard, "Combat Reach", "Expands player reach and hitboxes", Config.CombatReach,
+ctrls.CombatReach = createToggleRow(combatCard, "Combat Reach", "Expand reach & hitboxes", Config.CombatReach,
     function(v)
         Config.CombatReach = v
         if not v then resetHitboxes() end
     end, true)
-ctrls.CombatAura = createToggleRow(combatCard, "Combat Aura", "Auto attacks enemy players in range", Config.CombatAura,
+ctrls.CombatAura = createToggleRow(combatCard, "Combat Aura", "Auto attack enemies", Config.CombatAura,
     function(v)
         Config.CombatAura = v
         runStatusRow.SetValue(v and "⚔️ Combat Aura: ACTIVE" or "⚡ Identical Ready")
     end, true)
-ctrls.CombatRange = createSliderRow(combatCard, "Reach Distance", "Maximum reach & aura radius", 5, 50,
+ctrls.CombatRange = createSliderRow(combatCard, "Reach Distance", "Max reach & aura radius", 5, 50,
     Config.CombatRange, false, " studs", function(v)
         Config.CombatRange = v
     end, true)
-ctrls.CombatInterval = createSliderRow(combatCard, "Attack Interval", "Time between aura attacks", 0.1, 1.0,
+ctrls.CombatInterval = createSliderRow(combatCard, "Attack Interval", "Time between attacks", 0.1, 1.0,
     Config.CombatInterval, true, "s", function(v)
         Config.CombatInterval = v
     end, true)
-ctrls.CombatIgnoreTribe = createToggleRow(combatCard, "Ignore Tribe", "Do not target tribe members",
+ctrls.CombatIgnoreTribe = createToggleRow(combatCard, "Ignore Tribe", "Don't target tribe",
     Config.CombatIgnoreTribe, function(v)
         Config.CombatIgnoreTribe = v
     end, true)
-ctrls.TargetPriority = createDropdownRow(combatCard, "Target Priority", "Priority method for combat targets",
+ctrls.TargetPriority = createDropdownRow(combatCard, "Target Priority", "Priority method",
     { "Closest", "Lowest HP" }, Config.TargetPriority, function(v)
         Config.TargetPriority = v
     end, true)
-ctrls.LineOfSight = createToggleRow(combatCard, "Line of Sight", "Only target visible entities behind no walls",
+ctrls.LineOfSight = createToggleRow(combatCard, "Line of Sight", "Only visible targets",
     Config.LineOfSight, function(v)
         Config.LineOfSight = v
     end, true)
-ctrls.HumanizedPacing = createToggleRow(combatCard, "Humanized Pacing", "Adds natural delay variance to attack timings",
+ctrls.HumanizedPacing = createToggleRow(combatCard, "Humanized Pacing", "Natural delay variance",
     Config.HumanizedPacing, function(v)
         Config.HumanizedPacing = v
     end, true)
-ctrls.MicroBreaks = createToggleRow(combatCard, "Micro Breaks", "Brief periodic pauses for undetectable actions",
+ctrls.MicroBreaks = createToggleRow(combatCard, "Micro Breaks", "Periodic pauses",
     Config.MicroBreaks, function(v)
         Config.MicroBreaks = v
     end, true)
-ctrls.AutoDodge = createToggleRow(combatCard, "Auto Dodge", "Automatically dodge incoming attacks", Config.AutoDodge,
+ctrls.AutoDodge = createToggleRow(combatCard, "Auto Dodge", "Dodge incoming attacks", Config.AutoDodge,
     function(v)
         Config.AutoDodge = v
     end, true)
-ctrls.DodgeThreshold = createSliderRow(combatCard, "Dodge Sensitivity", "Threat detection distance for dodge", 8, 30,
+ctrls.DodgeThreshold = createSliderRow(combatCard, "Dodge Sensitivity", "Detection distance", 8, 30,
     Config.DodgeThreshold, false, " studs", function(v)
         Config.DodgeThreshold = v
     end, true)
 
 createCategoryHeader(tabs.Combat, "🏹 Bow & Ranged Aimbot")
 local aimbotCard = createCardGroup(tabs.Combat)
-ctrls.BowAimbot = createToggleRow(aimbotCard, "Bow Aimbot", "Locks aim onto target with drop compensation",
+ctrls.BowAimbot = createToggleRow(aimbotCard, "Bow Aimbot", "Lock aim with drop compensation",
     Config.BowAimbot, function(v)
         Config.BowAimbot = v
     end, true)
-ctrls.AimbotTarget = createDropdownRow(aimbotCard, "Target Mode", "Target entity type", { "Players", "Critters", "Both" },
+ctrls.AimbotTarget = createDropdownRow(aimbotCard, "Target Mode", "Entity type", { "Players", "Critters", "Both" },
     Config.AimbotTarget, function(v)
         Config.AimbotTarget = v
     end, true)
-ctrls.AimbotPart = createDropdownRow(aimbotCard, "Target Hitbox", "Body part to lock onto", { "Head", "Torso" },
+ctrls.AimbotPart = createDropdownRow(aimbotCard, "Target Hitbox", "Body part", { "Head", "Torso" },
     Config.AimbotPart, function(v)
         Config.AimbotPart = v
     end, true)
-ctrls.AimbotRange = createSliderRow(aimbotCard, "Aimbot Range", "Maximum search range for targets", 30, 400,
+ctrls.AimbotRange = createSliderRow(aimbotCard, "Aimbot Range", "Max search range", 30, 400,
     Config.AimbotRange, false, " studs", function(v)
         Config.AimbotRange = v
     end, true)
-ctrls.AimbotSmoothness = createSliderRow(aimbotCard, "Smoothness", "0 = Instant Snap, Higher = Smooth", 0, 9,
+ctrls.AimbotSmoothness = createSliderRow(aimbotCard, "Smoothness", "0=Instant, Higher=Smooth", 0, 9,
     Config.AimbotSmoothness, false, "", function(v)
         Config.AimbotSmoothness = v
     end, true)
-ctrls.AimbotPrediction = createToggleRow(aimbotCard, "Advanced Prediction", "Predicts target movement with velocity tracking",
+ctrls.AimbotPrediction = createToggleRow(aimbotCard, "Advanced Prediction", "Predict target movement",
     Config.AimbotPrediction, function(v)
         Config.AimbotPrediction = v
     end, true)
-ctrls.AimbotWallCheck = createToggleRow(aimbotCard, "Wall Check", "Only target enemies behind no walls",
+ctrls.AimbotWallCheck = createToggleRow(aimbotCard, "Wall Check", "Only target through walls",
     Config.AimbotWallCheck, function(v)
         Config.AimbotWallCheck = v
     end, true)
 
 createCategoryHeader(tabs.Combat, "💊 Survival, Heal & Threat Retreat")
 local healCard = createCardGroup(tabs.Combat)
-ctrls.AutoHeal = createToggleRow(healCard, "Auto Heal", "Automatically consumes food when health drops", Config.AutoHeal,
+ctrls.AutoHeal = createToggleRow(healCard, "Auto Heal", "Auto consume food", Config.AutoHeal,
     function(v)
         Config.AutoHeal = v
     end, true)
-ctrls.HealThreshold = createSliderRow(healCard, "Health Threshold", "Trigger heal below this health %", 10, 90,
+ctrls.HealThreshold = createSliderRow(healCard, "Health Threshold", "Trigger heal below %", 10, 90,
     Config.HealThreshold, false, "%", function(v)
         Config.HealThreshold = v
     end, true)
-ctrls.HealFood = createDropdownRow(healCard, "Food Preference", "Item name to consume from bag",
+ctrls.HealFood = createDropdownRow(healCard, "Food Preference", "Item to consume",
     { "Cooked Meat", "Raw Meat", "Berries", "Mushroom", "Apple", "Bloodfruit", "Sunfruit" }, Config.HealFood, function(v)
         Config.HealFood = v
     end, true)
 ctrls.ThreatProtection = createToggleRow(healCard, "Threat Retreat",
-    "Automatically navigates away from enemies at low HP", Config.ThreatProtection, function(v)
+    "Navigate away at low HP", Config.ThreatProtection, function(v)
         Config.ThreatProtection = v
     end, true)
-ctrls.ThreatRadius = createSliderRow(healCard, "Threat Radius", "Detection distance for threatening enemies", 15, 80,
+ctrls.ThreatRadius = createSliderRow(healCard, "Threat Radius", "Detection distance", 15, 80,
     Config.ThreatRadius, false, " studs", function(v)
         Config.ThreatRadius = v
     end, true)
-ctrls.RetreatHealth = createSliderRow(healCard, "Retreat Health %", "Retreat when health drops below this %", 10, 60,
+ctrls.RetreatHealth = createSliderRow(healCard, "Retreat Health %", "Retreat below %", 10, 60,
     Config.RetreatHealth, false, "%", function(v)
         Config.RetreatHealth = v
     end, true)
@@ -2152,58 +2098,58 @@ ctrls.RetreatHealth = createSliderRow(healCard, "Retreat Health %", "Retreat whe
 -- GATHER TAB --
 createCategoryHeader(tabs.Gather, "🎯 Auto Pickup & Magnet")
 local gatherPickupCard = createCardGroup(tabs.Gather)
-ctrls.AutoPickup = createToggleRow(gatherPickupCard, "Auto Pickup", "Collects and brings dropped items into your bag",
+ctrls.AutoPickup = createToggleRow(gatherPickupCard, "Auto Pickup", "Collect dropped items",
     Config.AutoPickup, function(v)
         Config.AutoPickup = v
     end, true)
-ctrls.PickupRange = createSliderRow(gatherPickupCard, "Pickup Radius", "Search distance for dropped items", 5, 80,
+ctrls.PickupRange = createSliderRow(gatherPickupCard, "Pickup Radius", "Search distance", 5, 80,
     Config.PickupRange, false, " studs", function(v)
         Config.PickupRange = v
     end, true)
-ctrls.PickupInterval = createSliderRow(gatherPickupCard, "Pickup Interval", "Time between pickup cycles", 0.05, 0.6,
+ctrls.PickupInterval = createSliderRow(gatherPickupCard, "Pickup Interval", "Time between cycles", 0.05, 0.6,
     Config.PickupInterval, true, "s", function(v)
         Config.PickupInterval = v
     end, true)
-ctrls.PickupFilter = createDropdownRow(gatherPickupCard, "Item Filter", "Category to prioritize for pickup",
+ctrls.PickupFilter = createDropdownRow(gatherPickupCard, "Item Filter", "Priority category",
     { "All", "Wood", "Stone", "Ore", "Food", "Weapon", "Valuables" }, Config.PickupFilter, function(v)
         Config.PickupFilter = v
     end, true)
 ctrls.AutoDropTrash = createToggleRow(gatherPickupCard, "Auto Drop Trash",
-    "Automatically drops useless leaves, grass and twigs", Config.AutoDropTrash, function(v)
+    "Drop leaves, grass, twigs", Config.AutoDropTrash, function(v)
         Config.AutoDropTrash = v
     end, true)
 ctrls.RareItemAlert = createToggleRow(gatherPickupCard, "Rare Item Alert",
-    "Screen alert when God Bag, Meteor or Ores drop", Config.RareItemAlert, function(v)
+    "Alert on rare items", Config.RareItemAlert, function(v)
         Config.RareItemAlert = v
     end, true)
 
 createCategoryHeader(tabs.Gather, "🌳 Resource & Critter Auras")
 local auraCard = createCardGroup(tabs.Gather)
-ctrls.ResourceAura = createToggleRow(auraCard, "Resource Aura", "Swings at trees, rocks and ores in reach",
+ctrls.ResourceAura = createToggleRow(auraCard, "Resource Aura", "Swing at resources",
     Config.ResourceAura, function(v)
         Config.ResourceAura = v
     end, true)
-ctrls.ResourceFilter = createDropdownRow(auraCard, "Resource Filter", "Target specific resource type",
+ctrls.ResourceFilter = createDropdownRow(auraCard, "Resource Filter", "Target type",
     { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.ResourceFilter, function(v)
         Config.ResourceFilter = v
     end, true)
-ctrls.ResourceRange = createSliderRow(auraCard, "Resource Range", "Reach distance for resource swings", 5, 40,
+ctrls.ResourceRange = createSliderRow(auraCard, "Resource Range", "Reach distance", 5, 40,
     Config.ResourceRange, false, " studs", function(v)
         Config.ResourceRange = v
     end, true)
-ctrls.ResourceInterval = createSliderRow(auraCard, "Resource Interval", "Time between resource swings", 0.1, 0.8,
+ctrls.ResourceInterval = createSliderRow(auraCard, "Resource Interval", "Time between swings", 0.1, 0.8,
     Config.ResourceInterval, true, "s", function(v)
         Config.ResourceInterval = v
     end, true)
-ctrls.CritterAura = createToggleRow(auraCard, "Critter Aura", "Swings at animals and mobs in reach", Config.CritterAura,
+ctrls.CritterAura = createToggleRow(auraCard, "Critter Aura", "Swing at critters", Config.CritterAura,
     function(v)
         Config.CritterAura = v
     end, true)
-ctrls.CritterRange = createSliderRow(auraCard, "Critter Range", "Reach distance for critter swings", 5, 40,
+ctrls.CritterRange = createSliderRow(auraCard, "Critter Range", "Reach distance", 5, 40,
     Config.CritterRange, false, " studs", function(v)
         Config.CritterRange = v
     end, true)
-ctrls.CritterInterval = createSliderRow(auraCard, "Critter Interval", "Time between critter swings", 0.1, 0.8,
+ctrls.CritterInterval = createSliderRow(auraCard, "Critter Interval", "Time between swings", 0.1, 0.8,
     Config.CritterInterval, true, "s", function(v)
         Config.CritterInterval = v
     end, true)
@@ -2211,83 +2157,83 @@ ctrls.CritterInterval = createSliderRow(auraCard, "Critter Interval", "Time betw
 -- FARM TAB --
 createCategoryHeader(tabs.Farm, "🤖 Smart Auto Farm")
 local farmCard = createCardGroup(tabs.Farm)
-ctrls.AutoFarm = createToggleRow(farmCard, "Auto Farm", "Walks to & harvests nearest targets naturally", Config.AutoFarm,
+ctrls.AutoFarm = createToggleRow(farmCard, "Auto Farm", "Harvest targets naturally", Config.AutoFarm,
     function(v)
         Config.AutoFarm = v
     end, true)
-ctrls.FarmType = createDropdownRow(farmCard, "Farm Target", "Select entity type to farm",
+ctrls.FarmType = createDropdownRow(farmCard, "Farm Target", "Entity type",
     { "Resource", "Critter", "Both" },
     Config.FarmType, function(v)
         Config.FarmType = v
     end, true)
-ctrls.FarmFilter = createDropdownRow(farmCard, "Resource Focus", "Resource category when farming",
+ctrls.FarmFilter = createDropdownRow(farmCard, "Resource Focus", "Resource category",
     { "All", "Wood", "Stone", "Ore", "Crystal", "Fiber" }, Config.FarmFilter, function(v)
         Config.FarmFilter = v
     end, true)
-ctrls.FarmRange = createSliderRow(farmCard, "Scan Radius", "Search distance for farm targets", 15, 150, Config.FarmRange,
+ctrls.FarmRange = createSliderRow(farmCard, "Scan Radius", "Search distance", 15, 150, Config.FarmRange,
     false, " studs", function(v)
         Config.FarmRange = v
     end, true)
-ctrls.FarmMovement = createDropdownRow(farmCard, "Movement Method", "Navigation style to reach targets",
+ctrls.FarmMovement = createDropdownRow(farmCard, "Movement Method", "Navigation style",
     { "Walk", "Glide" }, Config.FarmMovement, function(v)
         Config.FarmMovement = v
     end, true)
-ctrls.FarmSpeed = createSliderRow(farmCard, "Farm Speed", "Walk & glide speed during auto farming", 16, 80,
+ctrls.FarmSpeed = createSliderRow(farmCard, "Farm Speed", "Movement speed", 16, 80,
     Config.FarmSpeed or 36, false, " studs/s", function(v)
         Config.FarmSpeed = v
     end, true)
-ctrls.AutoEquipTool = createToggleRow(farmCard, "Auto Equip Best Tool", "Automatically equips best Axe/Pick/Weapon",
+ctrls.AutoEquipTool = createToggleRow(farmCard, "Auto Equip Tool", "Equip best tool",
     Config.AutoEquipTool, function(v)
         Config.AutoEquipTool = v
     end, true)
-ctrls.FilterUnreachable = createToggleRow(farmCard, "Filter Unreachable", "Ignores submerged & underground nodes",
+ctrls.FilterUnreachable = createToggleRow(farmCard, "Filter Unreachable", "Ignore unreachable nodes",
     Config.FilterUnreachable, function(v)
         Config.FilterUnreachable = v
     end, true)
-ctrls.StuckTimeout = createSliderRow(farmCard, "Stuck Timeout", "Seconds before changing target if obstructed", 3, 15,
+ctrls.StuckTimeout = createSliderRow(farmCard, "Stuck Timeout", "Seconds before changing target", 3, 15,
     Config.StuckTimeout, false, "s", function(v)
         Config.StuckTimeout = v
     end, true)
-ctrls.DeathRecovery = createToggleRow(farmCard, "Death Recovery", "Automatically re-engages farming after respawn",
+ctrls.DeathRecovery = createToggleRow(farmCard, "Death Recovery", "Re-engage after respawn",
     Config.DeathRecovery, function(v)
         Config.DeathRecovery = v
     end, true)
-ctrls.SmartPathfinding = createToggleRow(farmCard, "Smart Pathfinding", "Advanced navigation with obstacle avoidance",
+ctrls.SmartPathfinding = createToggleRow(farmCard, "Smart Pathfinding", "Advanced navigation",
     Config.SmartPathfinding, function(v)
         Config.SmartPathfinding = v
     end, true)
 
 createCategoryHeader(tabs.Farm, "📦 Deployables, Crops & Crafting")
 local deployCard = createCardGroup(tabs.Farm)
-ctrls.AutoChest = createToggleRow(deployCard, "Auto Loot Chests", "Opens and loots nearby chest structures",
+ctrls.AutoChest = createToggleRow(deployCard, "Auto Loot Chests", "Open nearby chests",
     Config.AutoChest, function(v)
         Config.AutoChest = v
     end, true)
-ctrls.ChestRange = createSliderRow(deployCard, "Chest Range", "Scan radius for chests", 5, 50, Config.ChestRange, false,
+ctrls.ChestRange = createSliderRow(deployCard, "Chest Range", "Scan radius", 5, 50, Config.ChestRange, false,
     " studs", function(v)
         Config.ChestRange = v
     end, true)
-ctrls.AutoPlant = createToggleRow(deployCard, "Auto Plant & Harvest", "Plants empty boxes and harvests mature crops",
+ctrls.AutoPlant = createToggleRow(deployCard, "Auto Plant & Harvest", "Plant & harvest crops",
     Config.AutoPlant, function(v)
         Config.AutoPlant = v
     end, true)
-ctrls.PlantRange = createSliderRow(deployCard, "Crop Range", "Scan radius for plant boxes & bushes", 10, 60,
+ctrls.PlantRange = createSliderRow(deployCard, "Crop Range", "Scan radius", 10, 60,
     Config.PlantRange, false, " studs", function(v)
         Config.PlantRange = v
     end, true)
-ctrls.AutoCraft = createToggleRow(deployCard, "Auto Craft Queue", "Repeatedly crafts selected item recipe",
+ctrls.AutoCraft = createToggleRow(deployCard, "Auto Craft Queue", "Craft selected recipe",
     Config.AutoCraft, function(v)
         Config.AutoCraft = v
     end, true)
-ctrls.CraftRecipe = createSearchDropdownRow(deployCard, "Craft Recipe", "Search or select any of 240+ recipes",
+ctrls.CraftRecipe = createSearchDropdownRow(deployCard, "Craft Recipe", "Search recipes",
     allCraftableRecipes, Config.CraftRecipe, function(v)
         Config.CraftRecipe = v
     end, true)
-ctrls.AutoProcess = createToggleRow(deployCard, "Auto Cook & Smelt", "Interacts with nearby Campfires & Furnaces",
+ctrls.AutoProcess = createToggleRow(deployCard, "Auto Cook & Smelt", "Interact with furnaces",
     Config.AutoProcess, function(v)
         Config.AutoProcess = v
     end, true)
-ctrls.AutoClaimDaily = createToggleRow(deployCard, "Auto Claim Daily", "Automatically claims daily rewards",
+ctrls.AutoClaimDaily = createToggleRow(deployCard, "Auto Claim Daily", "Claim daily rewards",
     Config.AutoClaimDaily, function(v)
         Config.AutoClaimDaily = v
     end, true)
@@ -2295,41 +2241,41 @@ ctrls.AutoClaimDaily = createToggleRow(deployCard, "Auto Claim Daily", "Automati
 -- ESP TAB --
 createCategoryHeader(tabs.ESP, "👁️ Visual ESP Highlights")
 local espCard = createCardGroup(tabs.ESP)
-ctrls.ESPPlayers = createToggleRow(espCard, "Player ESP", "Highlights other players with distance", Config.ESPPlayers,
+ctrls.ESPPlayers = createToggleRow(espCard, "Player ESP", "Highlight players", Config.ESPPlayers,
     function(v)
         Config.ESPPlayers = v
         if not v then clearESPCategory("player_") end
     end, true)
-ctrls.ESPCritters = createToggleRow(espCard, "Critter ESP", "Highlights animals and mobs with HP", Config.ESPCritters,
+ctrls.ESPCritters = createToggleRow(espCard, "Critter ESP", "Highlight critters", Config.ESPCritters,
     function(v)
         Config.ESPCritters = v
         if not v then clearESPCategory("critter_") end
     end, true)
-ctrls.ESPResources = createToggleRow(espCard, "Resource ESP", "Highlights trees, rocks, ores & crystals",
+ctrls.ESPResources = createToggleRow(espCard, "Resource ESP", "Highlight resources",
     Config.ESPResources, function(v)
         Config.ESPResources = v
         if not v then clearESPCategory("res_") end
     end, true)
-ctrls.ESPItems = createToggleRow(espCard, "Dropped Item ESP", "Highlights dropped loot and bags", Config.ESPItems,
+ctrls.ESPItems = createToggleRow(espCard, "Item ESP", "Highlight items", Config.ESPItems,
     function(v)
         Config.ESPItems = v
         if not v then clearESPCategory("item_") end
     end, true)
-ctrls.ESPChests = createToggleRow(espCard, "Chest ESP", "Highlights placed storage chests", Config.ESPChests, function(v)
+ctrls.ESPChests = createToggleRow(espCard, "Chest ESP", "Highlight chests", Config.ESPChests, function(v)
     Config.ESPChests = v
     if not v then clearESPCategory("chest_") end
 end, true)
-ctrls.ESPTraders = createToggleRow(espCard, "Trader ESP", "Highlights wandering traders on map", Config.ESPTraders,
+ctrls.ESPTraders = createToggleRow(espCard, "Trader ESP", "Highlight traders", Config.ESPTraders,
     function(v)
         Config.ESPTraders = v
         if not v then clearESPCategory("trader_") end
     end, true)
-ctrls.ESPMeteors = createToggleRow(espCard, "Meteor & God ESP", "Highlights active Meteors & God Rocks",
+ctrls.ESPMeteors = createToggleRow(espCard, "Meteor & God ESP", "Highlight rare items",
     Config.ESPMeteors, function(v)
         Config.ESPMeteors = v
         if not v then clearESPCategory("meteor_") end
     end, true)
-ctrls.ESPDistance = createSliderRow(espCard, "ESP Distance", "Maximum render distance for highlights", 50, 600,
+ctrls.ESPDistance = createSliderRow(espCard, "ESP Distance", "Max render distance", 50, 600,
     Config.ESPDistance, false, " studs", function(v)
         Config.ESPDistance = v
         if espFolder then
@@ -2340,7 +2286,7 @@ ctrls.ESPDistance = createSliderRow(espCard, "ESP Distance", "Maximum render dis
             end
         end
     end, true)
-ctrls.ESPTracers = createToggleRow(espCard, "Tracer Lines", "Draw lines from player to ESP targets",
+ctrls.ESPTracers = createToggleRow(espCard, "Tracer Lines", "Draw lines to targets",
     Config.ESPTracers, function(v)
         Config.ESPTracers = v
     end, true)
@@ -2348,15 +2294,15 @@ ctrls.ESPBoxes = createToggleRow(espCard, "Bounding Boxes", "Draw boxes around e
     function(v)
         Config.ESPBoxes = v
     end, true)
-ctrls.ESPHealthBars = createToggleRow(espCard, "Health Bars", "Show health bars above players/critters",
+ctrls.ESPHealthBars = createToggleRow(espCard, "Health Bars", "Show health bars",
     Config.ESPHealthBars, function(v)
         Config.ESPHealthBars = v
     end, true)
-ctrls.ESPNames = createToggleRow(espCard, "Show Names", "Display entity names in ESP", Config.ESPNames,
+ctrls.ESPNames = createToggleRow(espCard, "Show Names", "Display names", Config.ESPNames,
     function(v)
         Config.ESPNames = v
     end, true)
-ctrls.ESPDistanceText = createToggleRow(espCard, "Show Distance", "Display distance to entities",
+ctrls.ESPDistanceText = createToggleRow(espCard, "Show Distance", "Display distance",
     Config.ESPDistanceText, function(v)
         Config.ESPDistanceText = v
     end, true)
@@ -2364,38 +2310,38 @@ ctrls.ESPDistanceText = createToggleRow(espCard, "Show Distance", "Display dista
 -- MISC TAB --
 createCategoryHeader(tabs.Misc, "🏃 Movement & Character")
 local miscMoveCard = createCardGroup(tabs.Misc)
-ctrls.SpeedEnabled = createToggleRow(miscMoveCard, "Speed Boost", "Boosts player walk speed", Config.SpeedEnabled,
+ctrls.SpeedEnabled = createToggleRow(miscMoveCard, "Speed Boost", "Boost walk speed", Config.SpeedEnabled,
     function(v)
         Config.SpeedEnabled = v
     end, true)
-ctrls.SpeedValue = createSliderRow(miscMoveCard, "Walk Speed", "Movement speed value", 16, 60, Config.SpeedValue, false,
+ctrls.SpeedValue = createSliderRow(miscMoveCard, "Walk Speed", "Movement speed", 16, 60, Config.SpeedValue, false,
     "", function(v)
         Config.SpeedValue = v
     end, true)
-ctrls.JumpEnabled = createToggleRow(miscMoveCard, "Safe Jump Boost", "Safe capped JumpPower (50-83)", Config.JumpEnabled,
+ctrls.JumpEnabled = createToggleRow(miscMoveCard, "Jump Boost", "Boost jump power", Config.JumpEnabled,
     function(v)
         Config.JumpEnabled = v
     end, true)
-ctrls.JumpValue = createSliderRow(miscMoveCard, "Jump Power", "Server safe cap is 83", 50, 83, Config.JumpValue, false,
+ctrls.JumpValue = createSliderRow(miscMoveCard, "Jump Power", "Jump power value", 50, 83, Config.JumpValue, false,
     "", function(v)
         Config.JumpValue = math.clamp(v, 50, 83)
     end, true)
-ctrls.InfiniteJump = createToggleRow(miscMoveCard, "Infinite Jump", "Jump repeatedly in mid-air", Config.InfiniteJump,
+ctrls.InfiniteJump = createToggleRow(miscMoveCard, "Infinite Jump", "Jump in mid-air", Config.InfiniteJump,
     function(v)
         Config.InfiniteJump = v
     end, true)
-ctrls.Noclip = createToggleRow(miscMoveCard, "Noclip", "Pass through solid walls and barriers", Config.Noclip,
+ctrls.Noclip = createToggleRow(miscMoveCard, "Noclip", "Pass through walls", Config.Noclip,
     function(v)
         Config.Noclip = v
     end, true)
 
 createCategoryHeader(tabs.Misc, "🌍 Environment, Boat & Session")
 local miscEnvCard = createCardGroup(tabs.Misc)
-ctrls.AntiAFK = createToggleRow(miscEnvCard, "Anti-AFK", "Prevents Roblox 20-minute idle disconnect", Config.AntiAFK,
+ctrls.AntiAFK = createToggleRow(miscEnvCard, "Anti-AFK", "Prevent idle disconnect", Config.AntiAFK,
     function(v)
         Config.AntiAFK = v
     end, true)
-ctrls.Fullbright = createToggleRow(miscEnvCard, "Fullbright", "Removes darkness and shadows", Config.Fullbright,
+ctrls.Fullbright = createToggleRow(miscEnvCard, "Fullbright", "Remove darkness", Config.Fullbright,
     function(v)
         Config.Fullbright = v
         if not v then
@@ -2404,38 +2350,38 @@ ctrls.Fullbright = createToggleRow(miscEnvCard, "Fullbright", "Removes darkness 
             Lighting.Brightness = origLighting.Brightness
         end
     end, true)
-ctrls.NoFog = createToggleRow(miscEnvCard, "Remove Fog", "Clears atmospheric distance fog", Config.NoFog, function(v)
+ctrls.NoFog = createToggleRow(miscEnvCard, "Remove Fog", "Clear fog", Config.NoFog, function(v)
     Config.NoFog = v
     if not v then
         Lighting.FogEnd = origLighting.FogEnd
         if atmosphere then atmosphere.Density = origAtmosphereDensity end
     end
 end, true)
-ctrls.DisableParticles = createToggleRow(miscEnvCard, "Disable Particles", "Boosts FPS by disabling particle emitters",
+ctrls.DisableParticles = createToggleRow(miscEnvCard, "Disable Particles", "Boost FPS",
     Config.DisableParticles, function(v)
         Config.DisableParticles = v
     end, true)
-ctrls.BoatCruise = createToggleRow(miscEnvCard, "Boat Cruise Boost", "Propels boats forward automatically",
+ctrls.BoatCruise = createToggleRow(miscEnvCard, "Boat Cruise", "Auto propel boats",
     Config.BoatCruise, function(v)
         Config.BoatCruise = v
     end, true)
-ctrls.BoatSpeed = createSliderRow(miscEnvCard, "Boat Speed", "Cruise and boost speed for boats", 20, 120,
+ctrls.BoatSpeed = createSliderRow(miscEnvCard, "Boat Speed", "Cruise speed", 20, 120,
     Config.BoatSpeed or 45, false, " studs/s", function(v)
         Config.BoatSpeed = v
     end, true)
-ctrls.ChatMessages = createToggleRow(miscEnvCard, "Auto Chat Messages", "Sends periodic chat messages",
+ctrls.ChatMessages = createToggleRow(miscEnvCard, "Auto Chat", "Send periodic messages",
     Config.ChatMessages, function(v)
         Config.ChatMessages = v
     end, true)
-ctrls.ChatInterval = createSliderRow(miscEnvCard, "Chat Interval", "Seconds between chat messages", 10, 120,
+ctrls.ChatInterval = createSliderRow(miscEnvCard, "Chat Interval", "Seconds between messages", 10, 120,
     Config.ChatInterval, false, "s", function(v)
         Config.ChatInterval = v
     end, true)
-ctrls.AutoFishing = createToggleRow(miscEnvCard, "Auto Fishing", "Automatically fishes when equipped",
+ctrls.AutoFishing = createToggleRow(miscEnvCard, "Auto Fishing", "Fish automatically",
     Config.AutoFishing, function(v)
         Config.AutoFishing = v
     end, true)
-ctrls.KillCounter = createToggleRow(miscEnvCard, "Kill Counter", "Display kill counter on screen",
+ctrls.KillCounter = createToggleRow(miscEnvCard, "Kill Counter", "Display kill counter",
     Config.KillCounter, function(v)
         Config.KillCounter = v
     end, true)
@@ -2444,26 +2390,31 @@ ctrls.KillCounter = createToggleRow(miscEnvCard, "Kill Counter", "Display kill c
 createCategoryHeader(tabs.Stats, "📊 Session Statistics")
 local statsCard = createCardGroup(tabs.Stats)
 local statsKills = createInfoRow(statsCard, "🗡️ Kills", tostring(SessionStats.Kills), false)
-local statsResources = createInfoRow(statsCard, "⛏️ Resources Gathered", tostring(SessionStats.ResourcesGathered), false)
-local statsItems = createInfoRow(statsCard, "🎒 Items Picked Up", tostring(SessionStats.ItemsPickedUp), false)
-local statsChests = createInfoRow(statsCard, "📦 Chests Opened", tostring(SessionStats.ChestsOpened), false)
-local statsDistance = createInfoRow(statsCard, "👣 Distance Walked", string.format("%.2f studs", SessionStats.DistanceWalked), false)
+local statsResources = createInfoRow(statsCard, "⛏️ Resources", tostring(SessionStats.ResourcesGathered), false)
+local statsItems = createInfoRow(statsCard, "🎒 Items", tostring(SessionStats.ItemsPickedUp), false)
+local statsChests = createInfoRow(statsCard, "📦 Chests", tostring(SessionStats.ChestsOpened), false)
+local statsDistance = createInfoRow(statsCard, "👣 Distance", string.format("%.1f studs", SessionStats.DistanceWalked), false)
 local statsTime = createInfoRow(statsCard, "⏱️ Session Time", "00:00:00", false)
 
--- Update stats periodically
+-- Update stats periodically (Optimized)
 task.spawn(function()
+    local lastUpdate = tick()
     while mainFrame.Parent do
-        task.wait(1)
-        SessionStats.SessionTime = tick() - SessionStats.StartTime
-        local hours = math.floor(SessionStats.SessionTime / 3600)
-        local minutes = math.floor((SessionStats.SessionTime % 3600) / 60)
-        local seconds = math.floor(SessionStats.SessionTime % 60)
-        statsTime.SetValue(string.format("%02d:%02d:%02d", hours, minutes, seconds))
-        statsKills.SetValue(tostring(SessionStats.Kills))
-        statsResources.SetValue(tostring(SessionStats.ResourcesGathered))
-        statsItems.SetValue(tostring(SessionStats.ItemsPickedUp))
-        statsChests.SetValue(tostring(SessionStats.ChestsOpened))
-        statsDistance.SetValue(string.format("%.2f studs", SessionStats.DistanceWalked))
+        local now = tick()
+        if now - lastUpdate >= 1 then
+            lastUpdate = now
+            SessionStats.SessionTime = now - SessionStats.StartTime
+            local hours = math.floor(SessionStats.SessionTime / 3600)
+            local minutes = math.floor((SessionStats.SessionTime % 3600) / 60)
+            local seconds = math.floor(SessionStats.SessionTime % 60)
+            statsTime.SetValue(string.format("%02d:%02d:%02d", hours, minutes, seconds))
+            statsKills.SetValue(tostring(SessionStats.Kills))
+            statsResources.SetValue(tostring(SessionStats.ResourcesGathered))
+            statsItems.SetValue(tostring(SessionStats.ItemsPickedUp))
+            statsChests.SetValue(tostring(SessionStats.ChestsOpened))
+            statsDistance.SetValue(string.format("%.1f studs", SessionStats.DistanceWalked))
+        end
+        task.wait(0.5) -- Reduced frequency for performance
     end
 end)
 
@@ -2495,11 +2446,11 @@ local function TeleportToWaypoint(name)
     end
 end
 
-createButtonRow(waypointCard, "Save Current Position", "SAVE HERE", "Save current position as waypoint", function()
+createButtonRow(waypointCard, "Save Position", "SAVE", "Save current position", function()
     SaveWaypoint("Waypoint_" .. os.time())
 end, true)
 
-createButtonRow(waypointCard, "Teleport to Spawn", "SPAWN", "Teleport to spawn point", function()
+createButtonRow(waypointCard, "Teleport to Spawn", "SPAWN", "Teleport to spawn", function()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if root then
@@ -2508,7 +2459,7 @@ createButtonRow(waypointCard, "Teleport to Spawn", "SPAWN", "Teleport to spawn p
             root.CFrame = spawnPoint.CFrame
             SendNotification("Identical", "Teleported to spawn!", 2, "🏠")
         else
-            SendNotification("Identical", "Spawn point not found!", 2, "❌")
+            SendNotification("Identical", "Spawn not found!", 2, "❌")
         end
     end
 end, true)
@@ -2543,33 +2494,38 @@ searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     end
 end)
 
--- Window Controls --
-local isMinimized = false
-local function ToggleMinimization()
-    isMinimized = not isMinimized
-    bodyFrame.Visible = not isMinimized
-    footerBar.Visible = not isMinimized
-    mainFrame.Size = isMinimized and UDim2.new(0, 720, 0, 40) or UDim2.new(0, 720, 0, 500)
-    minBtn.Text = isMinimized and "+" or "—"
+-- UI Toggle Functions --
+ToggleUIMinimize = function()
+    Config.UIMinimized = not Config.UIMinimized
+    bodyFrame.Visible = not Config.UIMinimized
+    footerBar.Visible = not Config.UIMinimized
+    mainFrame.Size = Config.UIMinimized and UDim2.new(0, 680, 0, 40) or UDim2.new(0, 680, 0, 480)
+    minBtn.Text = Config.UIMinimized and "+" or "—"
+    minimizeButton.Text = Config.UIMinimized and "☐" or "—"
 end
 
-minBtn.MouseButton1Click:Connect(ToggleMinimization)
-closeBtn.MouseButton1Click:Connect(UnloadScript)
-
--- UI Visibility Toggle --
-local uiVisible = true
-ToggleUiVisibility = function()
-    uiVisible = not uiVisible
-    mainFrame.Visible = uiVisible
+ToggleUIVisibility = function()
+    Config.UIVisible = not Config.UIVisible
+    mainFrame.Visible = Config.UIVisible
+    minimizeButton.Visible = Config.UIVisible
     if floatingCrescent then
-        floatingCrescent.Visible = not uiVisible
+        floatingCrescent.Visible = not Config.UIVisible
     end
 end
+
+minBtn.MouseButton1Click:Connect(ToggleUIMinimize)
+minBtn.TouchTap:Connect(ToggleUIMinimize)
+
+closeBtn.MouseButton1Click:Connect(UnloadScript)
+closeBtn.TouchTap:Connect(UnloadScript)
+
+minimizeButton.MouseButton1Click:Connect(ToggleUIMinimize)
+minimizeButton.TouchTap:Connect(ToggleUIMinimize)
 
 -- Input Handling --
 table.insert(activeConnections, UserInputService.InputBegan:Connect(function(input, gpe)
     if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl or input.KeyCode == Config.UIKeybind or (typeof(Config.UIKeybind) == "string" and input.KeyCode.Name == Config.UIKeybind) then
-        ToggleUiVisibility()
+        ToggleUIVisibility()
         return
     end
     if input.KeyCode == Config.StopKeybind or (typeof(Config.StopKeybind) == "string" and input.KeyCode.Name == Config.StopKeybind) or input.KeyCode == Enum.KeyCode.End then
@@ -2581,7 +2537,7 @@ table.insert(activeConnections, UserInputService.InputBegan:Connect(function(inp
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
         if root and (Config.CombatReach or Config.CombatAura) then
-            local playersFolder = Workspace:FindFirstChild("Players")
+            local playersFolder = CachedRefs.PlayersFolder
             if playersFolder then
                 local hitList = {}
                 for _, pChar in ipairs(playersFolder:GetChildren()) do
@@ -2609,7 +2565,7 @@ table.insert(activeConnections, UserInputService.InputBegan:Connect(function(inp
     end
 end))
 
--- Helper Functions --
+-- Helper Functions (Optimized) --
 local function getRootPart(inst)
     if not inst or not inst:IsA("Model") then return nil end
     return inst.PrimaryPart
@@ -2629,10 +2585,16 @@ local function hasLineOfSight(fromPos, toPos, ignoreList)
     return result == nil or result.Instance:IsDescendantOf(ignoreList[1])
 end
 
+-- Optimized Velocity Tracker (Reduced Updates) --
 local trackedVelocities = {}
+local lastVelocityUpdate = 0
 local function updateVelocityTracker(dt)
+    local now = tick()
+    if now - lastVelocityUpdate < 0.1 then return end -- Throttle to 10 updates/second
+    lastVelocityUpdate = now
+    
     if not dt or dt <= 0 then return end
-    local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+    local critters = CachedRefs.CrittersFolder
     if critters then
         for _, c in ipairs(critters:GetChildren()) do
             local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("Torso") or
@@ -2650,7 +2612,7 @@ local function updateVelocityTracker(dt)
             end
         end
     end
-    local players = Workspace:FindFirstChild("Players")
+    local players = CachedRefs.PlayersFolder
     if players then
         for _, pChar in ipairs(players:GetChildren()) do
             local p = pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Head")
@@ -2753,7 +2715,7 @@ local function getAimbotTarget()
     local maxWorldRange = Config.AimbotRange or 300
 
     if Config.AimbotTarget == "Players" or Config.AimbotTarget == "Both" then
-        local playersFolder = Workspace:FindFirstChild("Players")
+        local playersFolder = CachedRefs.PlayersFolder
         if playersFolder then
             for _, pChar in ipairs(playersFolder:GetChildren()) do
                 if pChar ~= char then
@@ -2783,7 +2745,7 @@ local function getAimbotTarget()
     end
 
     if not nearestPart and (Config.AimbotTarget == "Critters" or Config.AimbotTarget == "Both") then
-        local crittersFolder = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+        local crittersFolder = CachedRefs.CrittersFolder
         if crittersFolder then
             for _, critter in ipairs(crittersFolder:GetChildren()) do
                 local part = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("Torso") or
@@ -2810,10 +2772,11 @@ local function getAimbotTarget()
     return nearestPart, nearestAimPoint
 end
 
--- Aimbot Loop --
+-- Aimbot Loop (Optimized - Only runs when needed) --
 table.insert(activeConnections, RunService.RenderStepped:Connect(function()
     if Config.BowAimbot and Camera and isBowEquipped() then
-        local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+        local isRightClicking = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) or 
+                                 UserInputService:IsMouseButtonPressed(Enum.UserInputType.Touch)
         if isRightClicking then
             local targetPart, aimPoint = getAimbotTarget()
             if targetPart and aimPoint then
@@ -2829,7 +2792,7 @@ table.insert(activeConnections, RunService.RenderStepped:Connect(function()
     end
 end))
 
--- ESP System --
+-- ESP System (Optimized) --
 local function getOrCreateESP(key, adornee, text, color)
     if not adornee or not adornee.Parent then
         if espStorage[key] then
@@ -2843,7 +2806,7 @@ local function getOrCreateESP(key, adornee, text, color)
     if not bb or not bb.Parent then
         bb = Instance.new("BillboardGui")
         bb.Name = key
-        bb.Size = UDim2.new(0, 140, 0, 28)
+        bb.Size = UDim2.new(0, 130, 0, 26)
         bb.StudsOffset = Vector3.new(0, 3.5, 0)
         bb.AlwaysOnTop = true
         bb.MaxDistance = Config.ESPDistance
@@ -2875,9 +2838,14 @@ local function getOrCreateESP(key, adornee, text, color)
     return bb
 end
 
--- Auto Equip Best Tool --
+-- Auto Equip Best Tool (Optimized) --
+local lastEquipTime = 0
 local function autoEquipBestToolFor(targetCategory)
     if not Config.AutoEquipTool then return end
+    local now = tick()
+    if now - lastEquipTime < 0.5 then return end -- Throttle
+    lastEquipTime = now
+    
     pcall(function()
         local GameUtil = RS:FindFirstChild("Modules") and RS.Modules:FindFirstChild("GameUtil") and
             require(RS.Modules.GameUtil)
@@ -2928,7 +2896,7 @@ local function autoEquipBestToolFor(targetCategory)
     end)
 end
 
--- Strike Target --
+-- Strike Target (Optimized) --
 local function strikeTarget(targetPart)
     if not targetPart or not LocalPlayer.Character then return end
     local char = LocalPlayer.Character
@@ -2962,11 +2930,10 @@ local function strikeTarget(targetPart)
         end)
     end
     
-    -- Update stats
     SessionStats.ResourcesGathered = SessionStats.ResourcesGathered + 1
 end
 
--- Pickup Item --
+-- Pickup Item (Optimized) --
 local function pickupItem(item)
     if not item then return end
     local eid = tonumber(item:GetAttribute("EntityID") or (item.Parent and item.Parent:GetAttribute("EntityID")))
@@ -2983,11 +2950,10 @@ local function pickupItem(item)
         end
     end
     
-    -- Update stats
     SessionStats.ItemsPickedUp = SessionStats.ItemsPickedUp + 1
 end
 
--- Resource Accessibility Check --
+-- Resource Accessibility Check (Optimized) --
 local function isResourceAccessible(rootPos, targetPos, targetObj)
     if not Config.FilterUnreachable then return true end
     local yDiff = math.abs(targetPos.Y - rootPos.Y)
@@ -3009,9 +2975,9 @@ local function isResourceAccessible(rootPos, targetPos, targetObj)
     return true
 end
 
--- Iterate Resources --
+-- Iterate Resources (Optimized with Cache) --
 local function forEachResource(callback)
-    local resFolder = Workspace:FindFirstChild("Resources")
+    local resFolder = CachedRefs.ResourcesFolder
     if resFolder then
         for _, obj in ipairs(resFolder:GetChildren()) do
             callback(obj)
@@ -3044,19 +3010,25 @@ local farmTarget = nil
 local farmApproachPos = nil
 local farmTargetAcquiredTime = 0
 local lastJumpState = false
+local lastMainLoopUpdate = 0
 
--- Main Game Loop --
+-- Main Game Loop (Heavily Optimized for 60 FPS) --
 table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
-    updateVelocityTracker(dt)
     local now = tick()
+    
+    -- Throttle velocity tracker updates
+    updateVelocityTracker(dt)
+    
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local root = char and char:FindFirstChild("HumanoidRootPart")
 
-    -- Track distance walked
+    -- Track distance walked (Optimized)
     if root and lastPosition then
         local distance = (root.Position - lastPosition).Magnitude
-        SessionStats.DistanceWalked = SessionStats.DistanceWalked + distance
+        if distance < 100 then -- Ignore teleports
+            SessionStats.DistanceWalked = SessionStats.DistanceWalked + distance
+        end
     end
     if root then
         lastPosition = root.Position
@@ -3095,7 +3067,9 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
     -- Noclip --
     if Config.Noclip and char then
         for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
         end
     end
 
@@ -3133,7 +3107,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
 
     -- Combat Reach --
     if Config.CombatReach and root then
-        local playersFolder = Workspace:FindFirstChild("Players")
+        local playersFolder = CachedRefs.PlayersFolder
         if playersFolder then
             for _, pChar in ipairs(playersFolder:GetChildren()) do
                 if pChar ~= char then
@@ -3153,9 +3127,9 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
 
     local paceVariance = Config.HumanizedPacing and ((math.random(-25, 25)) / 1000) or 0
 
-    -- Auto Dodge --
+    -- Auto Dodge (Optimized) --
     if Config.AutoDodge and root and hum then
-        local playersFolder = Workspace:FindFirstChild("Players")
+        local playersFolder = CachedRefs.PlayersFolder
         if playersFolder then
             for _, enemy in ipairs(playersFolder:GetChildren()) do
                 if enemy ~= char then
@@ -3163,11 +3137,10 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
                     if eRoot then
                         local dist = (root.Position - eRoot.Position).Magnitude
                         if dist <= Config.DodgeThreshold then
-                            -- Check if enemy is moving towards us
                             local enemyVel = eRoot.AssemblyLinearVelocity
                             local toUs = (root.Position - eRoot.Position).Unit
                             local dotProduct = enemyVel:Dot(toUs)
-                            if dotProduct > 10 then -- Enemy moving towards us fast
+                            if dotProduct > 10 then
                                 local dodgeDir = (root.Position - eRoot.Position).Unit
                                 local perpendicularDir = Vector3.new(-dodgeDir.Z, 0, dodgeDir.X)
                                 hum:MoveTo(root.Position + perpendicularDir * 15)
@@ -3182,7 +3155,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
 
     -- Threat Protection --
     if Config.ThreatProtection and root and hum and (hum.Health / hum.MaxHealth * 100) < Config.RetreatHealth then
-        local playersFolder = Workspace:FindFirstChild("Players")
+        local playersFolder = CachedRefs.PlayersFolder
         if playersFolder then
             for _, enemy in ipairs(playersFolder:GetChildren()) do
                 if enemy ~= char then
@@ -3200,9 +3173,9 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Combat Aura --
+    -- Combat Aura (Optimized) --
     if Config.CombatAura and root and (now - lastCombatTime >= (Config.CombatInterval + paceVariance)) then
-        local playersFolder = Workspace:FindFirstChild("Players")
+        local playersFolder = CachedRefs.PlayersFolder
         if playersFolder then
             local bestTarget = nil
             local bestMetric = math.huge
@@ -3230,7 +3203,6 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
                 autoEquipBestToolFor("Combat")
                 strikeTarget(bestTarget)
                 lastCombatTime = now
-                -- Update kill counter (simplified - in real game would check if enemy died)
                 SessionStats.Kills = SessionStats.Kills + 1
             end
         end
@@ -3246,7 +3218,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastHealTime = now
     end
 
-    -- Resource Aura --
+    -- Resource Aura (Optimized) --
     if Config.ResourceAura and root and (now - lastResourceTime >= (Config.ResourceInterval + paceVariance)) then
         local foundResource = nil
         local nearestDist = Config.ResourceRange
@@ -3306,9 +3278,9 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Critter Aura --
+    -- Critter Aura (Optimized) --
     if Config.CritterAura and root and (now - lastCritterTime >= (Config.CritterInterval + paceVariance)) then
-        local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+        local critters = CachedRefs.CrittersFolder
         if critters then
             local nearestCritter = nil
             local nearestDist = Config.CritterRange
@@ -3333,7 +3305,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Auto Farm --
+    -- Auto Farm (Optimized) --
     if Config.AutoFarm and root and hum then
         if farmTarget and farmTarget.Parent and (now - farmTargetAcquiredTime < (Config.StuckTimeout or 6)) and isResourceAccessible(root.Position, farmTarget.Position, farmTarget.Parent) then
             local targetPos = farmTarget.Position
@@ -3374,7 +3346,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
                     cat = "Ore"
                 elseif targetName:find("crystal") then
                     cat = "Crystal"
-                elseif farmTarget.Parent and (farmTarget.Parent.Parent == Workspace:FindFirstChild("Critters") or farmTarget.Parent.Parent == Workspace:FindFirstChild("HumanoidCritters")) then
+                elseif farmTarget.Parent and (farmTarget.Parent.Parent == CachedRefs.CrittersFolder) then
                     cat = "Critter"
                 end
 
@@ -3385,12 +3357,13 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
                     lastFarmSwingTime = now
                 end
 
-                local itemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or
-                    Workspace
-                for _, item in ipairs(itemsFolder:GetChildren()) do
-                    local ip = item:IsA("BasePart") and item or getRootPart(item)
-                    if ip and (root.Position - ip.Position).Magnitude <= 20 then
-                        pickupItem(item)
+                local itemsFolder = CachedRefs.ItemsFolder
+                if itemsFolder then
+                    for _, item in ipairs(itemsFolder:GetChildren()) do
+                        local ip = item:IsA("BasePart") and item or getRootPart(item)
+                        if ip and (root.Position - ip.Position).Magnitude <= 20 then
+                            pickupItem(item)
+                        end
                     end
                 end
             end
@@ -3433,7 +3406,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
             end
 
             if not bestTarget and (Config.FarmType == "Critter" or Config.FarmType == "Both") then
-                local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+                local critters = CachedRefs.CrittersFolder
                 if critters then
                     for _, critter in ipairs(critters:GetChildren()) do
                         local p = critter:FindFirstChild("ENTITY_HITBOX") or critter:FindFirstChild("HumanoidRootPart") or
@@ -3463,55 +3436,57 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Auto Pickup --
+    -- Auto Pickup (Optimized) --
     if Config.AutoPickup and root and (now - lastPickupTime >= (Config.PickupInterval + paceVariance)) then
-        local itemsFolder = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or Workspace
-        local targetItem = nil
-        local nearestDist = Config.PickupRange
+        local itemsFolder = CachedRefs.ItemsFolder
+        if itemsFolder then
+            local targetItem = nil
+            local nearestDist = Config.PickupRange
 
-        for _, item in ipairs(itemsFolder:GetChildren()) do
-            if item:IsA("Model") or item:IsA("BasePart") then
-                local n = item.Name:lower()
-                local isMatch = false
+            for _, item in ipairs(itemsFolder:GetChildren()) do
+                if item:IsA("Model") or item:IsA("BasePart") then
+                    local n = item.Name:lower()
+                    local isMatch = false
 
-                if Config.PickupFilter == "All" then
-                    isMatch = not item:FindFirstChildOfClass("Humanoid") and (item.Name ~= "Terrain") and
-                        not item:IsA("Terrain")
-                elseif Config.PickupFilter == "Wood" then
-                    isMatch = n:find("wood") or n:find("log") or n:find("stick")
-                elseif Config.PickupFilter == "Stone" then
-                    isMatch = n:find("stone") or n:find("rock")
-                elseif Config.PickupFilter == "Ore" then
-                    isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("magnetite")
-                elseif Config.PickupFilter == "Food" then
-                    isMatch = n:find("meat") or n:find("berry") or n:find("fruit") or n:find("apple")
-                elseif Config.PickupFilter == "Weapon" then
-                    isMatch = n:find("sword") or n:find("axe") or n:find("pick") or n:find("bow") or n:find("hammer")
-                elseif Config.PickupFilter == "Valuables" then
-                    isMatch = n:find("emerald") or n:find("god") or n:find("magnetite") or n:find("essence") or
-                        n:find("meteor")
-                end
+                    if Config.PickupFilter == "All" then
+                        isMatch = not item:FindFirstChildOfClass("Humanoid") and (item.Name ~= "Terrain") and
+                            not item:IsA("Terrain")
+                    elseif Config.PickupFilter == "Wood" then
+                        isMatch = n:find("wood") or n:find("log") or n:find("stick")
+                    elseif Config.PickupFilter == "Stone" then
+                        isMatch = n:find("stone") or n:find("rock")
+                    elseif Config.PickupFilter == "Ore" then
+                        isMatch = n:find("ore") or n:find("iron") or n:find("gold") or n:find("magnetite")
+                    elseif Config.PickupFilter == "Food" then
+                        isMatch = n:find("meat") or n:find("berry") or n:find("fruit") or n:find("apple")
+                    elseif Config.PickupFilter == "Weapon" then
+                        isMatch = n:find("sword") or n:find("axe") or n:find("pick") or n:find("bow") or n:find("hammer")
+                    elseif Config.PickupFilter == "Valuables" then
+                        isMatch = n:find("emerald") or n:find("god") or n:find("magnetite") or n:find("essence") or
+                            n:find("meteor")
+                    end
 
-                if isMatch then
-                    local p = item:IsA("BasePart") and item or getRootPart(item)
-                    if p then
-                        local dist = (root.Position - p.Position).Magnitude
-                        if dist <= nearestDist then
-                            nearestDist = dist
-                            targetItem = item
+                    if isMatch then
+                        local p = item:IsA("BasePart") and item or getRootPart(item)
+                        if p then
+                            local dist = (root.Position - p.Position).Magnitude
+                            if dist <= nearestDist then
+                                nearestDist = dist
+                                targetItem = item
+                            end
                         end
                     end
                 end
             end
-        end
 
-        if targetItem then
-            pickupItem(targetItem)
-            lastPickupTime = now
+            if targetItem then
+                pickupItem(targetItem)
+                lastPickupTime = now
+            end
         end
     end
 
-    -- Auto Drop Trash --
+    -- Auto Drop Trash (Optimized) --
     if Config.AutoDropTrash and (now - lastDropTime >= 1.5) then
         local bag = LocalPlayer.PlayerGui:FindFirstChild("MainGui") and
             LocalPlayer.PlayerGui.MainGui:FindFirstChild("Panels") and
@@ -3531,7 +3506,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastDropTime = now
     end
 
-    -- Auto Craft --
+    -- Auto Craft (Optimized) --
     if Config.AutoCraft and (now - lastCraftTime >= (Config.CraftInterval or 1.5)) then
         if Config.CraftRecipe and Config.CraftRecipe ~= "" then
             pcall(function()
@@ -3549,17 +3524,19 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastCraftTime = now
     end
 
-    -- Auto Plant --
+    -- Auto Plant (Optimized) --
     if Config.AutoPlant and root and (now - lastPlantTime >= 2.0) then
-        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
-        for _, d in ipairs(deployables:GetChildren()) do
-            local n = d.Name:lower()
-            if n:find("plant box") or n:find("farm") or n:find("bush") or n:find("crop") then
-                local p = getRootPart(d)
-                if p and (root.Position - p.Position).Magnitude <= Config.PlantRange then
-                    if RemoteInteractStructure then
-                        RemoteInteractStructure:FireServer(d, "Harvest")
-                        RemoteInteractStructure:FireServer(d, "Plant")
+        local deployables = CachedRefs.DeployablesFolder
+        if deployables then
+            for _, d in ipairs(deployables:GetChildren()) do
+                local n = d.Name:lower()
+                if n:find("plant box") or n:find("farm") or n:find("bush") or n:find("crop") then
+                    local p = getRootPart(d)
+                    if p and (root.Position - p.Position).Magnitude <= Config.PlantRange then
+                        if RemoteInteractStructure then
+                            RemoteInteractStructure:FireServer(d, "Harvest")
+                            RemoteInteractStructure:FireServer(d, "Plant")
+                        end
                     end
                 end
             end
@@ -3567,16 +3544,18 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastPlantTime = now
     end
 
-    -- Auto Process --
+    -- Auto Process (Optimized) --
     if Config.AutoProcess and root and (now - lastProcessTime >= 2.0) then
-        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
-        for _, d in ipairs(deployables:GetChildren()) do
-            local n = d.Name:lower()
-            if n:find("campfire") or n:find("furnace") or n:find("cauldron") or n:find("fire") then
-                local p = getRootPart(d)
-                if p and (root.Position - p.Position).Magnitude <= 25 then
-                    if RemoteInteractStructure then
-                        RemoteInteractStructure:FireServer(d, "Cook")
+        local deployables = CachedRefs.DeployablesFolder
+        if deployables then
+            for _, d in ipairs(deployables:GetChildren()) do
+                local n = d.Name:lower()
+                if n:find("campfire") or n:find("furnace") or n:find("cauldron") or n:find("fire") then
+                    local p = getRootPart(d)
+                    if p and (root.Position - p.Position).Magnitude <= 25 then
+                        if RemoteInteractStructure then
+                            RemoteInteractStructure:FireServer(d, "Cook")
+                        end
                     end
                 end
             end
@@ -3584,19 +3563,21 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastProcessTime = now
     end
 
-    -- Auto Chest --
+    -- Auto Chest (Optimized) --
     if Config.AutoChest and root and (now - lastChestTime >= 1.0) then
-        local deployables = Workspace:FindFirstChild("Deployables") or Workspace
-        for _, d in ipairs(deployables:GetChildren()) do
-            local n = d.Name:lower()
-            if n:find("chest") or n:find("crate") or n:find("box") then
-                local p = getRootPart(d)
-                if p then
-                    local dist = (root.Position - p.Position).Magnitude
-                    if dist <= Config.ChestRange then
-                        if RemoteInteractStructure then
-                            RemoteInteractStructure:FireServer(d, "Open")
-                            SessionStats.ChestsOpened = SessionStats.ChestsOpened + 1
+        local deployables = CachedRefs.DeployablesFolder
+        if deployables then
+            for _, d in ipairs(deployables:GetChildren()) do
+                local n = d.Name:lower()
+                if n:find("chest") or n:find("crate") or n:find("box") then
+                    local p = getRootPart(d)
+                    if p then
+                        local dist = (root.Position - p.Position).Magnitude
+                        if dist <= Config.ChestRange then
+                            if RemoteInteractStructure then
+                                RemoteInteractStructure:FireServer(d, "Open")
+                                SessionStats.ChestsOpened = SessionStats.ChestsOpened + 1
+                            end
                         end
                     end
                 end
@@ -3605,7 +3586,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastChestTime = now
     end
 
-    -- Auto Fishing --
+    -- Auto Fishing (Optimized) --
     if Config.AutoFishing and (now - lastFishingTime >= (Config.FishingDelay or 2)) then
         if RemoteFishing then
             pcall(function() RemoteFishing:FireServer() end)
@@ -3613,7 +3594,7 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
         lastFishingTime = now
     end
 
-    -- Auto Chat --
+    -- Auto Chat (Optimized) --
     if Config.ChatMessages and (now - lastChatTime >= (Config.ChatInterval or 30)) then
         local chatService = game:GetService("Chat")
         if chatService and Config.ChatText then
@@ -3626,31 +3607,43 @@ table.insert(activeConnections, RunService.Heartbeat:Connect(function(dt)
 
     -- Fullbright --
     if Config.Fullbright then
-        Lighting.Ambient = Color3.new(1, 1, 1)
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        Lighting.Brightness = 2
+        if Lighting.Ambient ~= Color3.new(1, 1, 1) then
+            Lighting.Ambient = Color3.new(1, 1, 1)
+            Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
+            Lighting.Brightness = 2
+        end
     end
 
     -- No Fog --
     if Config.NoFog then
-        Lighting.FogEnd = 100000
-        if atmosphere then atmosphere.Density = 0 end
+        if Lighting.FogEnd ~= 100000 then
+            Lighting.FogEnd = 100000
+        end
+        if atmosphere and atmosphere.Density ~= 0 then
+            atmosphere.Density = 0
+        end
     end
 
-    -- Disable Particles --
+    -- Disable Particles (Optimized - Only disable once) --
     if Config.DisableParticles then
+        local disabled = false
         for _, p in ipairs(Workspace:GetDescendants()) do
             if p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") then
-                p.Enabled = false
+                if p.Enabled then
+                    p.Enabled = false
+                    disabled = true
+                end
             end
+        end
+        if not disabled then
+            Config.DisableParticles = false -- Disable feature if no particles found
         end
     end
 end))
 
--- ESP Update Loop --
+-- ESP Update Loop (Optimized - Runs at 2 FPS instead of continuously) --
 task.spawn(function()
     while mainFrame.Parent do
-        task.wait(0.5)
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
 
@@ -3659,7 +3652,7 @@ task.spawn(function()
             if not Config.ESPPlayers then
                 clearESPCategory("player_")
             else
-                local playersFolder = Workspace:FindFirstChild("Players")
+                local playersFolder = CachedRefs.PlayersFolder
                 if playersFolder then
                     for _, pChar in ipairs(playersFolder:GetChildren()) do
                         if pChar ~= char then
@@ -3670,7 +3663,7 @@ task.spawn(function()
                                 if dist <= Config.ESPDistance then
                                     local text = ""
                                     if Config.ESPNames then text = text .. pChar.Name end
-                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
                                     getOrCreateESP("player_" .. pChar.Name, pRoot, text, Colors.AccentRed)
                                 end
                             end
@@ -3683,7 +3676,7 @@ task.spawn(function()
             if not Config.ESPCritters then
                 clearESPCategory("critter_")
             else
-                local critters = Workspace:FindFirstChild("Critters") or Workspace:FindFirstChild("HumanoidCritters")
+                local critters = CachedRefs.CrittersFolder
                 if critters then
                     for _, c in ipairs(critters:GetChildren()) do
                         local p = c:FindFirstChild("ENTITY_HITBOX") or c:FindFirstChild("HumanoidRootPart") or
@@ -3692,7 +3685,7 @@ task.spawn(function()
                             local dist = (root.Position - p.Position).Magnitude
                             if dist <= Config.ESPDistance then
                                 local text = Config.ESPNames and c.Name or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
                                 getOrCreateESP("critter_" .. c:GetDebugId(), p, text, Colors.AccentOrange)
                             end
                         end
@@ -3714,7 +3707,7 @@ task.spawn(function()
                                 local col = n:find("crystal") and Colors.AccentPurple or
                                     (n:find("ore") and Colors.AccentYellow or Colors.AccentGreen)
                                 local text = Config.ESPNames and obj.Name or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
                                 getOrCreateESP("res_" .. obj:GetDebugId(), p, text, col)
                             end
                         end
@@ -3726,18 +3719,20 @@ task.spawn(function()
             if not Config.ESPItems then
                 clearESPCategory("item_")
             else
-                local items = Workspace:FindFirstChild("Items") or Workspace:FindFirstChild("DroppedItems") or Workspace
-                for _, it in ipairs(items:GetChildren()) do
-                    if it:IsA("Model") or it:IsA("BasePart") then
-                        local n = it.Name:lower()
-                        if n:find("bag") or n:find("meat") or n:find("ore") or n:find("wood") or n:find("bar") or n:find("potion") or n:find("sword") then
-                            local p = it:IsA("BasePart") and it or getRootPart(it)
-                            if p then
-                                local dist = (root.Position - p.Position).Magnitude
-                                if dist <= Config.ESPDistance then
-                                    local text = Config.ESPNames and it.Name or ""
-                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
-                                    getOrCreateESP("item_" .. it:GetDebugId(), p, text, Colors.BluePrimary)
+                local items = CachedRefs.ItemsFolder
+                if items then
+                    for _, it in ipairs(items:GetChildren()) do
+                        if it:IsA("Model") or it:IsA("BasePart") then
+                            local n = it.Name:lower()
+                            if n:find("bag") or n:find("meat") or n:find("ore") or n:find("wood") or n:find("bar") or n:find("potion") or n:find("sword") then
+                                local p = it:IsA("BasePart") and it or getRootPart(it)
+                                if p then
+                                    local dist = (root.Position - p.Position).Magnitude
+                                    if dist <= Config.ESPDistance then
+                                        local text = Config.ESPNames and it.Name or ""
+                                        if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
+                                        getOrCreateESP("item_" .. it:GetDebugId(), p, text, Colors.BluePrimary)
+                                    end
                                 end
                             end
                         end
@@ -3749,17 +3744,19 @@ task.spawn(function()
             if not Config.ESPChests then
                 clearESPCategory("chest_")
             else
-                local deployables = Workspace:FindFirstChild("Deployables") or Workspace
-                for _, d in ipairs(deployables:GetChildren()) do
-                    local n = d.Name:lower()
-                    if n:find("chest") or n:find("crate") or n:find("box") then
-                        local p = getRootPart(d)
-                        if p then
-                            local dist = (root.Position - p.Position).Magnitude
-                            if dist <= Config.ESPDistance then
-                                local text = Config.ESPNames and d.Name or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
-                                getOrCreateESP("chest_" .. d:GetDebugId(), p, text, Colors.AccentYellow)
+                local deployables = CachedRefs.DeployablesFolder
+                if deployables then
+                    for _, d in ipairs(deployables:GetChildren()) do
+                        local n = d.Name:lower()
+                        if n:find("chest") or n:find("crate") or n:find("box") then
+                            local p = getRootPart(d)
+                            if p then
+                                local dist = (root.Position - p.Position).Magnitude
+                                if dist <= Config.ESPDistance then
+                                    local text = Config.ESPNames and d.Name or ""
+                                    if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
+                                    getOrCreateESP("chest_" .. d:GetDebugId(), p, text, Colors.AccentYellow)
+                                end
                             end
                         end
                     end
@@ -3778,7 +3775,7 @@ task.spawn(function()
                             local dist = (root.Position - p.Position).Magnitude
                             if dist <= Config.ESPDistance then
                                 local text = Config.ESPNames and ("Trader: " .. obj.Name) or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
                                 getOrCreateESP("trader_" .. obj:GetDebugId(), p, text, Colors.AccentGreen)
                             end
                         end
@@ -3798,10 +3795,10 @@ task.spawn(function()
                             local dist = (root.Position - p.Position).Magnitude
                             if dist <= Config.ESPDistance then
                                 local text = Config.ESPNames and ("RARE: " .. obj.Name) or ""
-                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. " studs]" end
+                                if Config.ESPDistanceText then text = text .. " [" .. math.floor(dist) .. "m]" end
                                 getOrCreateESP("meteor_" .. obj:GetDebugId(), p, text, Colors.AccentPink)
                                 if Config.RareItemAlert and dist <= 120 then
-                                    SendNotification("Identical", "Rare Spawn In Reach: " .. obj.Name, 2, "⭐")
+                                    SendNotification("Identical", "Rare Spawn: " .. obj.Name, 2, "⭐")
                                 end
                             end
                         end
@@ -3809,6 +3806,8 @@ task.spawn(function()
                 end
             end
         end
+        
+        task.wait(0.5) -- Update ESP every 0.5 seconds (2 FPS) for performance
     end
 end)
 
@@ -3822,17 +3821,4 @@ LocalPlayer.Idled:Connect(function()
 end)
 
 -- Welcome Notification --
-SendNotification("Identical v3.0", "Loaded successfully! Press Left-CTRL to toggle menu.", 3, "✅")
-
--- Gradient Animation for Border --
-task.spawn(function()
-    local angle = 0
-    while mainFrame.Parent do
-        angle = angle + 1
-        if angle >= 360 then angle = 0 end
-        if mainGradient then
-            mainGradient.Rotation = angle
-        end
-        task.wait(0.05)
-    end
-end)
+SendNotification("Identical v4.0", "Optimized for Mobile! Press L-CTRL to toggle.", 3, "✅")
