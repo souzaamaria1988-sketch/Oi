@@ -1,4 +1,4 @@
-  --==================================================================--
+--==================================================================--
 -- GodsAndPlayersESP — Booga Booga (v4 — MÁXIMA OTIMIZAÇÃO)
 --
 -- • SEM beacons (eram a causa da multiplicação/travamento)
